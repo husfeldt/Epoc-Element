@@ -1,10 +1,22 @@
-import { HexTile, ImprovementType, TemperatureZone, UnitDef, UnitState } from '../types/game';
+import {
+  HexTile,
+  ImprovementType,
+  ShorelineType,
+  TemperatureZone,
+  UnitDef,
+  UnitState,
+} from '../types/game';
+import { hexNeighbors, tileKey } from './hexMath';
 
 export type AtlasSlotId =
   | 'tropical'
   | 'temperate'
   | 'arid'
   | 'arctic'
+  | 'transitions'
+  | 'desert_hills_transitions'
+  | 'specialty_clusters'
+  | 'coastal_shores'
   | 'infrastructure'
   | 'units';
 
@@ -42,7 +54,7 @@ const PREMADE_ATLASES: AtlasSlotMeta[] = [
   {
     id: 'tropical',
     src: '/assets/aistudio/image_badc2470.png',
-    cols: 12,
+    cols: 14,
     rows: 9,
     sliceMode: 'tropical_columns',
   },
@@ -65,6 +77,34 @@ const PREMADE_ATLASES: AtlasSlotMeta[] = [
     src: '/src/assets/images/sheet_arctic_tiles_1794774960839.jpg',
     cols: 6,
     rows: 4,
+    sliceMode: 'grid',
+  },
+  {
+    id: 'transitions',
+    src: '/src/assets/images/sheet_biome_transitions_1794850485941.jpg',
+    cols: 6,
+    rows: 4,
+    sliceMode: 'grid',
+  },
+  {
+    id: 'desert_hills_transitions',
+    src: '/src/assets/images/sheet_desert_grass_hills_transitions.jpg',
+    cols: 4,
+    rows: 2,
+    sliceMode: 'grid',
+  },
+  {
+    id: 'specialty_clusters',
+    src: '/src/assets/images/sheet_specialty_hex_tiles.jpg',
+    cols: 4,
+    rows: 2,
+    sliceMode: 'grid',
+  },
+  {
+    id: 'coastal_shores',
+    src: '/src/assets/images/sheet_coastal_shores.jpg',
+    cols: 4,
+    rows: 2,
     sliceMode: 'grid',
   },
   {
@@ -195,9 +235,34 @@ function buildSeamlessDioramaSprite(raw: HTMLCanvasElement): {
 } {
   const w = raw.width;
   const h = raw.height;
-  // Front soil cliff height in our 3D isometric blocks is ~14.5% of sprite width
-  const cliffCut = Math.max(6, Math.round(w * 0.148));
-  const surfaceBottomY = Math.max(Math.round(h * 0.55), h - cliffCut);
+  const rctx = raw.getContext('2d', { willReadFrequently: true });
+  let detectedCliff = Math.round(w * 0.21);
+
+  if (rctx) {
+    const rawData = rctx.getImageData(0, 0, w, h).data;
+    const measureSideSpan = (sx: number) => {
+      const x = Math.max(0, Math.min(w - 1, sx));
+      let topY = -1;
+      let botY = -1;
+      for (let y = Math.round(h * 0.15); y < h; y++) {
+        const a = rawData[(y * w + x) * 4 + 3];
+        if (a > 64) {
+          if (topY === -1) topY = y;
+          botY = y;
+        }
+      }
+      return topY !== -1 && botY > topY ? botY - topY : 0;
+    };
+    const leftSpan = measureSideSpan(Math.round(w * 0.035));
+    const rightSpan = measureSideSpan(Math.round(w * 0.965));
+    const avgSpan = (leftSpan + rightSpan) * 0.5;
+    if (avgSpan > w * 0.11 && avgSpan < w * 0.34) {
+      detectedCliff = Math.round(avgSpan * 0.96);
+    }
+  }
+
+  const cliffCut = Math.max(8, Math.min(Math.round(w * 0.29), detectedCliff));
+  const surfaceBottomY = Math.max(Math.round(h * 0.52), h - cliffCut);
   const outH = Math.min(h, surfaceBottomY + 1);
   // Mathematical semi-height of the pointy-top isometric hex diamond
   const hexSemiH = (w / Math.sqrt(3)) * 0.56;
@@ -223,7 +288,7 @@ function buildSeamlessDioramaSprite(raw: HTMLCanvasElement): {
       // Normalized offset from top hex diamond center
       const nx = Math.abs(x - halfW) / Math.max(1, halfW); // 0 at center, 1 at left/right corner
       // Bottom V-edge of the isometric hex diamond: at nx=0 -> y = outH - 1; at nx=1 -> y = outH - 1 - hexSemiH * 0.5
-      const bottomHexEdgeY = outH - 1 - nx * (hexSemiH * 0.5);
+      const bottomHexEdgeY = outH - 1 - nx * (hexSemiH * 0.52);
 
       if (y > bottomHexEdgeY) {
         // Below the top surface's bottom rim -> soil cliff wall -> erase cleanly!
@@ -231,16 +296,15 @@ function buildSeamlessDioramaSprite(raw: HTMLCanvasElement): {
         continue;
       }
 
-      // Compute normalized hex-norm distance inside the lower & side hex region to softly feather edges
-      // so adjacent tile terrains connect smoothly with zero hard block borders.
+      // Softly feather the lower & side hex perimeter so adjacent tile terrains connect smoothly
+      // over the cross-blended ground plane with zero hard block borders.
       const dy = y - hexCenterY;
-      // Preserve tall 3D props rising above hex center (trees, mountains, roofs) at full opacity
-      const hexDist = Math.max(nx, (nx * 0.5 + Math.abs(dy) / Math.max(1, hexSemiH)));
-      if (dy > -hexSemiH * 0.35 && hexDist > 0.78) {
-        const edgeFade = Math.max(0, Math.min(1, (0.98 - hexDist) / 0.2));
-        data[idx + 3] = Math.round(a * edgeFade);
-      } else if (hexDist > 0.92 && y > hexCenterY - hexSemiH * 0.75) {
-        const rimFade = Math.max(0, Math.min(1, (1.0 - hexDist) / 0.08));
+      const hexDist = Math.max(nx, nx * 0.5 + Math.abs(dy) / Math.max(1, hexSemiH));
+      if (dy > -hexSemiH * 0.28 && hexDist > 0.72) {
+        const edgeFade = Math.max(0, Math.min(1, (0.97 - hexDist) / 0.25));
+        data[idx + 3] = Math.round(a * edgeFade * edgeFade);
+      } else if (hexDist > 0.88 && y > hexCenterY - hexSemiH * 0.75) {
+        const rimFade = Math.max(0, Math.min(1, (0.99 - hexDist) / 0.11));
         data[idx + 3] = Math.round(a * rimFade);
       }
     }
@@ -584,42 +648,507 @@ function resolveZoneAtlasId(zone: TemperatureZone): AtlasSlotId {
   return 'temperate';
 }
 
+function pickTransitionCoords(
+  atlas: LoadedAtlas | undefined,
+  coords: Array<[number, number]>,
+  hash: number
+): SlicedSprite | null {
+  if (!atlas) return null;
+  const pool: SlicedSprite[] = [];
+  for (const [c, r] of coords) {
+    const sp = atlas.byCoord.get(`${c},${r}`);
+    if (sp) pool.push(sp);
+  }
+  if (pool.length === 0) return null;
+  return pool[hash % pool.length];
+}
+
+export function isBiomeTransitionTile(
+  tile: HexTile,
+  allTiles?: Record<string, HexTile>
+): boolean {
+  if (!allTiles) return false;
+  if (tile.biome === 'ocean' || tile.biome === 'coast' || tile.biome === 'mountain') return false;
+  if (tile.clusterType) return true;
+  const neighbors = hexNeighbors(tile.q, tile.r)
+    .map((n) => allTiles[tileKey(n.q, n.r)])
+    .filter((nt): nt is HexTile => Boolean(nt && nt.biome !== 'ocean' && nt.biome !== 'coast'));
+
+  // Only plains/tundra bordering desert or arctic/temperate boundaries need 3D transition props
+  if (tile.biome === 'plains') {
+    return neighbors.some((nt) => nt.biome === 'desert' || nt.temperature === 'arid');
+  }
+  return neighbors.some(
+    (nt) => nt.biome !== tile.biome || nt.temperature !== tile.temperature
+  );
+}
+
+export function isHighSovereignPeak(
+  tile: HexTile,
+  allTiles?: Record<string, HexTile>
+): boolean {
+  if (tile.biome !== 'mountain') return false;
+  if (tile.clusterRole === 'center') return true;
+  if (tile.clusterRole === 'inner_ring') return false;
+  if (!allTiles) return true;
+  const mtnNeighbors = hexNeighbors(tile.q, tile.r)
+    .map((n) => allTiles[tileKey(n.q, n.r)])
+    .filter((nt): nt is HexTile => Boolean(nt && nt.biome === 'mountain'));
+  if (mtnNeighbors.length === 0) return true;
+  const myScore = tile.elevation * 1000 + (tileHash(tile.q, tile.r) % 100);
+  return mtnNeighbors.every(
+    (nt) => myScore >= nt.elevation * 1000 + (tileHash(nt.q, nt.r) % 100)
+  );
+}
+
+export function isOasisCenterTile(
+  tile: HexTile,
+  allTiles?: Record<string, HexTile>
+): boolean {
+  if (tile.biome !== 'desert') return false;
+  if (tile.clusterType === 'oasis' && tile.clusterRole === 'center') return true;
+  if (tile.clusterType === 'oasis' && tile.clusterRole === 'inner_ring') return false;
+  const hash = tileHash(tile.q, tile.r);
+  if (tile.hasRiver && allTiles) {
+    const desertNeighbors = hexNeighbors(tile.q, tile.r).filter(
+      (n) => allTiles[tileKey(n.q, n.r)]?.biome === 'desert'
+    ).length;
+    if (desertNeighbors >= 4) return true;
+  }
+  return hash % 13 === 0 && tile.feature === 'none';
+}
+
+export function resolveTileShoreline(
+  tile: HexTile,
+  allTiles?: Record<string, HexTile>,
+  mapHeight = 22
+): ShorelineType {
+  if (tile.shoreline && tile.shoreline !== 'none') return tile.shoreline;
+  if (!allTiles) return 'sandy_beach';
+
+  const nTiles = hexNeighbors(tile.q, tile.r)
+    .map((n) => allTiles[tileKey(n.q, n.r)])
+    .filter((nt): nt is HexTile => Boolean(nt));
+
+  const hasWaterNeighbor = nTiles.some((nt) => nt.biome === 'coast' || nt.biome === 'ocean');
+  const hasLandNeighbor = nTiles.some((nt) => nt.biome !== 'coast' && nt.biome !== 'ocean');
+
+  if (tile.biome !== 'coast' && !hasWaterNeighbor) return 'none';
+  if (tile.biome === 'coast' && !hasLandNeighbor && !tile.clusterType) return 'none';
+
+  // Check if an adjacent coast/land neighbor already has an explicit shoreline
+  const explicitNeighbor = nTiles.find((nt) => nt.shoreline && nt.shoreline !== 'none');
+  if (explicitNeighbor?.shoreline) return explicitNeighbor.shoreline;
+
+  const lat = Math.abs(tile.r / Math.max(1, mapHeight - 1) - 0.5) * 2;
+  const landNeighbors =
+    tile.biome === 'coast'
+      ? nTiles.filter((nt) => nt.biome !== 'coast' && nt.biome !== 'ocean')
+      : [tile];
+
+  if (
+    lat >= 0.74 ||
+    tile.temperature === 'arctic' ||
+    landNeighbors.some((l) => l.temperature === 'arctic' || l.biome === 'tundra')
+  ) {
+    return 'icy_shore';
+  }
+
+  const hasRiverMouth =
+    tile.hasRiver ||
+    tile.riverEdges?.some(Boolean) ||
+    landNeighbors.some((l) => l.hasRiver || l.riverEdges?.some(Boolean));
+  if (hasRiverMouth) {
+    return 'coastal_swamp';
+  }
+
+  if (landNeighbors.some((l) => l.biome === 'mountain' || (l.biome === 'hills' && l.elevation > 0.62))) {
+    return 'high_cliffs';
+  }
+  if (landNeighbors.some((l) => l.biome === 'hills')) {
+    return 'rocky_shore';
+  }
+
+  const hash = tileHash(tile.q, tile.r);
+  if (lat < 0.34 && (hash % 4 === 0 || tile.clusterType === 'coral_lagoon')) {
+    return 'coral_reef';
+  }
+  if (landNeighbors.some((l) => l.biome === 'forest') && hash % 3 === 0) {
+    return 'coastal_swamp';
+  }
+  if (hash % 5 === 0 && !landNeighbors.some((l) => l.biome === 'desert')) {
+    return 'rocky_shore';
+  }
+  return 'sandy_beach';
+}
+
 export function getTerrainTileSprite(
   tile: HexTile,
-  hasAdjacentLand: boolean
+  _hasAdjacentLand: boolean,
+  allTiles?: Record<string, HexTile>
 ): SlicedSprite | null {
   const hash = tileHash(tile.q, tile.r);
   const slotId = resolveZoneAtlasId(tile.temperature);
   const atlas = spriteAtlas.getAtlas(slotId) || spriteAtlas.getAtlas('temperate');
+  const transAtlas = spriteAtlas.getAtlas('transitions');
+  const dhAtlas = spriteAtlas.getAtlas('desert_hills_transitions');
+  const specAtlas = spriteAtlas.getAtlas('specialty_clusters');
+  const coastAtlas = spriteAtlas.getAtlas('coastal_shores');
+  const tempAtlas = spriteAtlas.getAtlas('temperate');
+  const aridAtlas = spriteAtlas.getAtlas('arid');
+
+  // 0a. Dedicated Shoreline & Coastal Cluster Tiles (Atolls, Coral Reefs, Swamp Deltas, Sea Cliffs, Icy Fjords)
+  if (tile.biome === 'coast') {
+    const shore = resolveTileShoreline(tile, allTiles);
+    if (tile.clusterType === 'coral_lagoon' || shore === 'coral_reef') {
+      if (tile.clusterRole === 'center') {
+        const sp = pickTransitionCoords(coastAtlas, [[2, 1]], hash);
+        if (sp) return sp;
+      }
+      if (tile.clusterRole === 'inner_ring' || hash % 2 === 0) {
+        const sp = pickTransitionCoords(coastAtlas, [[0, 1]], hash);
+        if (sp) return sp;
+      }
+    }
+    if (
+      (tile.clusterType === 'coastal_swamp_delta' && tile.clusterRole === 'center') ||
+      (shore === 'coastal_swamp' && tile.riverEdges?.some(Boolean))
+    ) {
+      const sp = pickTransitionCoords(coastAtlas, [[3, 1]], hash);
+      if (sp) return sp;
+    }
+    if (
+      (tile.clusterType === 'icy_fjord' || shore === 'icy_shore') &&
+      (tile.clusterRole === 'center' || hash % 3 === 0)
+    ) {
+      const sp = pickTransitionCoords(coastAtlas, [[1, 1]], hash);
+      if (sp) return sp;
+    }
+    return null;
+  }
+
+  // 0a-land: Coastal Swamp Delta & High Cliff Headland Cluster Land Tiles
+  if (tile.biome !== 'ocean' && tile.biome !== 'mountain') {
+    const shore = resolveTileShoreline(tile, allTiles);
+    if (tile.clusterType === 'coastal_swamp_delta' || shore === 'coastal_swamp') {
+      if (tile.biome === 'plains' || tile.biome === 'forest') {
+        const sp =
+          tile.hasRiver
+            ? pickTransitionCoords(coastAtlas, [[3, 1], [3, 0]], hash)
+            : pickTransitionCoords(coastAtlas, [[3, 0]], hash);
+        if (sp) return sp;
+      }
+    }
+    if (
+      (tile.clusterType === 'cliff_headland' || shore === 'high_cliffs') &&
+      tile.biome === 'hills'
+    ) {
+      const sp = pickTransitionCoords(coastAtlas, [[2, 0]], hash);
+      if (sp) return sp;
+    }
+    if (shore === 'rocky_shore' && tile.biome === 'hills' && hash % 2 === 0) {
+      const sp = pickTransitionCoords(coastAtlas, [[1, 0]], hash);
+      if (sp) return sp;
+    }
+  }
+
+  // 0. Dedicated Multi-Tile Mountain Massif & Tropical Mountain Sprites
+  if (tile.biome === 'mountain') {
+    const isApex = isHighSovereignPeak(tile, allTiles);
+    if (tile.temperature === 'tropical') {
+      const sp = isApex
+        ? pickTransitionCoords(specAtlas, [[0, 0]], hash)
+        : pickTransitionCoords(specAtlas, [[1, 0], [0, 0]], hash);
+      if (sp) return sp;
+    }
+    if (tile.temperature === 'arid') {
+      if (aridAtlas) {
+        const sp = isApex
+          ? pickTransitionCoords(aridAtlas, [[5, 2], [6, 2]], hash)
+          : pickTransitionCoords(aridAtlas, [[3, 2], [4, 2]], hash);
+        if (sp) return sp;
+      }
+    }
+    // Temperate & Arctic Mountains (Sovereign Peak vs Companion Sub-Peak)
+    const sp = isApex
+      ? pickTransitionCoords(specAtlas, [[2, 1]], hash) ||
+        pickTransitionCoords(tempAtlas, [[6, 2], [7, 2]], hash)
+      : pickTransitionCoords(specAtlas, [[3, 1]], hash) ||
+        pickTransitionCoords(tempAtlas, [[4, 2], [5, 2]], hash);
+    if (sp) return sp;
+  }
+
+  // 0b. Dedicated Multi-Tile Desert Oasis Cluster (Oasis Heart + 6 Surrounding Oasis Rim Dune Tiles)
+  if (tile.biome === 'desert' && allTiles) {
+    if (isOasisCenterTile(tile, allTiles)) {
+      const oasisSp =
+        pickTransitionCoords(specAtlas, [[0, 1]], hash) ||
+        pickTransitionCoords(aridAtlas, [[4, 1], [5, 1], [6, 1]], hash);
+      if (oasisSp) return oasisSp;
+    }
+    const bordersOasisCenter =
+      (tile.clusterType === 'oasis' && tile.clusterRole === 'inner_ring') ||
+      hexNeighbors(tile.q, tile.r).some((n) => {
+        const nt = allTiles[tileKey(n.q, n.r)];
+        return nt && isOasisCenterTile(nt, allTiles);
+      });
+    if (bordersOasisCenter) {
+      const rimSp =
+        pickTransitionCoords(specAtlas, [[1, 1]], hash) ||
+        pickTransitionCoords(aridAtlas, [[0, 1], [1, 1], [2, 1]], hash);
+      if (rimSp) return rimSp;
+    }
+  }
+
+  // 0c. High-Resolution Tropical Hills & Rainforest Canopy (replaces blurry low-res tropical sheet)
+  if (tile.temperature === 'tropical') {
+    if (tile.biome === 'hills') {
+      const sp =
+        pickTransitionCoords(specAtlas, [[2, 0]], hash) ||
+        pickTransitionCoords(transAtlas, [[4, 1], [2, 3]], hash);
+      if (sp) return sp;
+    }
+    if (tile.biome === 'forest') {
+      const sp =
+        pickTransitionCoords(specAtlas, [[3, 0]], hash) ||
+        pickTransitionCoords(transAtlas, [[1, 1], [2, 1]], hash);
+      if (sp) return sp;
+    }
+  }
+
+  // Neighbor-aware biome & climate transition sprite selection
+  if (allTiles && tile.biome !== 'ocean' && tile.biome !== 'mountain') {
+    const neighborEntries = hexNeighbors(tile.q, tile.r)
+      .map((n) => ({
+        dq: n.q - tile.q,
+        dr: n.r - tile.r,
+        t: allTiles[tileKey(n.q, n.r)],
+      }))
+      .filter(
+        (item): item is { dq: number; dr: number; t: HexTile } =>
+          Boolean(item.t && item.t.biome !== 'ocean' && item.t.biome !== 'coast')
+      );
+
+    const hasDesertNeighbor = neighborEntries.some(
+      (n) => n.t.biome === 'desert' || n.t.temperature === 'arid'
+    );
+    const hasGreenHillsNeighbor = neighborEntries.some(
+      (n) => n.t.biome === 'hills' && n.t.temperature !== 'arid' && n.t.temperature !== 'arctic'
+    );
+    const hasGreenLandNeighbor = neighborEntries.some(
+      (n) =>
+        (n.t.biome === 'plains' || n.t.biome === 'forest' || n.t.biome === 'hills') &&
+        n.t.temperature !== 'arid' &&
+        n.t.temperature !== 'arctic'
+    );
+    const hasForestNeighbor = neighborEntries.some((n) => n.t.biome === 'forest');
+    const hasPlainsNeighbor = neighborEntries.some((n) => n.t.biome === 'plains');
+    const hasMountainNeighbor = neighborEntries.some((n) => n.t.biome === 'mountain');
+    const hasArcticNeighbor = neighborEntries.some(
+      (n) => n.t.biome === 'tundra' || n.t.temperature === 'arctic'
+    );
+    const hasTemperateNeighbor = neighborEntries.some((n) => n.t.temperature === 'temperate');
+
+    // 1. Desert <-> Grass Hills / Green Land Transition
+    if (tile.biome === 'desert' && (hasGreenHillsNeighbor || hasGreenLandNeighbor)) {
+      if (tile.hasRiver) {
+        const rivSp =
+          pickTransitionCoords(dhAtlas, [[2, 1]], hash) ||
+          pickTransitionCoords(transAtlas, [[4, 0], [5, 0]], hash);
+        if (rivSp) return rivSp;
+      }
+      const greenVecX = neighborEntries
+        .filter(
+          (n) =>
+            n.t.biome === 'hills' ||
+            n.t.biome === 'plains' ||
+            n.t.biome === 'forest'
+        )
+        .reduce((acc, n) => acc + (n.dq + n.dr * 0.5), 0);
+      const greenVecY = neighborEntries
+        .filter(
+          (n) =>
+            n.t.biome === 'hills' ||
+            n.t.biome === 'plains' ||
+            n.t.biome === 'forest'
+        )
+        .reduce((acc, n) => acc + n.dr, 0);
+
+      if (hasGreenHillsNeighbor) {
+        const sp =
+          greenVecX >= 0
+            ? pickTransitionCoords(dhAtlas, [[0, 0], [3, 1], [1, 1]], hash)
+            : greenVecY < 0
+              ? pickTransitionCoords(dhAtlas, [[3, 0], [1, 0], [1, 1]], hash)
+              : pickTransitionCoords(dhAtlas, [[1, 0], [3, 0], [3, 1]], hash);
+        if (sp) return sp;
+      }
+
+      const sp =
+        pickTransitionCoords(
+          dhAtlas,
+          greenVecX >= 0
+            ? [[0, 0], [3, 1], [1, 1]]
+            : [[1, 0], [3, 0], [1, 1]],
+          hash
+        ) ||
+        pickTransitionCoords(
+          transAtlas,
+          [
+            [0, 0],
+            [1, 0],
+            [2, 0],
+            [3, 0],
+          ],
+          hash
+        );
+      if (sp) return sp;
+    }
+
+    // 2. Hills bordering Desert / Arid (or Arid Hills bordering Green Land/Forest)
+    if (
+      tile.biome === 'hills' &&
+      ((tile.temperature !== 'arid' && hasDesertNeighbor) ||
+        (tile.temperature === 'arid' && hasGreenLandNeighbor))
+    ) {
+      if (tile.hasRiver) {
+        const rivSp =
+          pickTransitionCoords(dhAtlas, [[2, 1]], hash) ||
+          pickTransitionCoords(transAtlas, [[3, 3]], hash);
+        if (rivSp) return rivSp;
+      }
+      if (hasForestNeighbor) {
+        const fSp =
+          pickTransitionCoords(transAtlas, [[4, 1], [3, 0]], hash) ||
+          pickTransitionCoords(dhAtlas, [[3, 1], [1, 1]], hash);
+        if (fSp) return fSp;
+      }
+      const desertVecX = neighborEntries
+        .filter((n) => n.t.biome === 'desert' || n.t.temperature === 'arid')
+        .reduce((acc, n) => acc + (n.dq + n.dr * 0.5), 0);
+
+      const sp =
+        pickTransitionCoords(
+          dhAtlas,
+          desertVecX <= 0
+            ? [
+                [0, 0],
+                [3, 1],
+                [1, 1],
+              ]
+            : [
+                [1, 0],
+                [3, 0],
+                [1, 1],
+              ],
+          hash
+        ) ||
+        pickTransitionCoords(
+          transAtlas,
+          [
+            [3, 0],
+            [4, 3],
+            [2, 3],
+          ],
+          hash
+        );
+      if (sp) return sp;
+    }
+
+    // 3. Mountain Massif Foothill Cluster (Hills bordering Mountain)
+    if (tile.biome === 'hills' && (tile.clusterRole === 'outer_ring' || hasMountainNeighbor)) {
+      if (tile.temperature === 'tropical') {
+        const sp = pickTransitionCoords(specAtlas, [[2, 0]], hash);
+        if (sp) return sp;
+      } else if (tile.temperature === 'arctic') {
+        const sp = pickTransitionCoords(transAtlas, [[2, 2]], hash);
+        if (sp) return sp;
+      } else if (tile.temperature === 'temperate') {
+        const sp =
+          pickTransitionCoords(transAtlas, [[4, 2], [4, 1]], hash) ||
+          pickTransitionCoords(specAtlas, [[3, 1]], hash);
+        if (sp) return sp;
+      }
+    }
+
+    // 4. Grass Hills bordering Forest
+    if (tile.biome === 'hills' && tile.temperature === 'temperate') {
+      if (hasForestNeighbor && hasPlainsNeighbor) {
+        const fSp = pickTransitionCoords(transAtlas, [[4, 1], [2, 3]], hash);
+        if (fSp) return fSp;
+      }
+    }
+
+    // 5. Savanna / Steppe Plains bordering Desert
+    if (tile.biome === 'plains' && hasDesertNeighbor) {
+      const sp =
+        pickTransitionCoords(dhAtlas, [[1, 1], [3, 0]], hash) ||
+        pickTransitionCoords(transAtlas, [[0, 0], [2, 0], [5, 1], [0, 3]], hash);
+      if (sp) return sp;
+    }
+
+    // 6. Woodland / Forest Edge bordering Plains or Desert
+    if (tile.biome === 'forest') {
+      const sameForestCount = neighborEntries.filter((n) => n.t.biome === 'forest').length;
+      if (hasDesertNeighbor) {
+        const sp =
+          pickTransitionCoords(transAtlas, [[5, 1], [0, 1]], hash) ||
+          pickTransitionCoords(dhAtlas, [[1, 1]], hash);
+        if (sp) return sp;
+      }
+      if (hasArcticNeighbor && tile.temperature !== 'arctic') {
+        const sp = pickTransitionCoords(transAtlas, [[1, 2], [5, 3]], hash);
+        if (sp) return sp;
+      }
+      if (sameForestCount <= 2 && hasPlainsNeighbor) {
+        const sp =
+          tile.temperature === 'tropical'
+            ? pickTransitionCoords(transAtlas, [[1, 1], [2, 1]], hash)
+            : tile.temperature === 'arctic'
+              ? pickTransitionCoords(transAtlas, [[1, 2], [5, 3]], hash)
+              : pickTransitionCoords(transAtlas, [[0, 1], [4, 1]], hash);
+        if (sp) return sp;
+      }
+    }
+
+    // 7. Tundra / Arctic bordering Temperate
+    if ((tile.biome === 'tundra' || tile.temperature === 'arctic') && hasTemperateNeighbor) {
+      const sp =
+        tile.biome === 'hills'
+          ? pickTransitionCoords(transAtlas, [[2, 2], [0, 2]], hash)
+          : pickTransitionCoords(transAtlas, [[0, 2], [1, 2]], hash);
+      if (sp) return sp;
+    }
+  }
+
   if (!atlas) return null;
 
   if (slotId === 'tropical') {
     if (tile.biome === 'ocean') {
-      return tile.feature === 'natural_wonder' || tile.feature === 'geothermal_vent'
-        ? atlas.byCoord.get('6,4') || atlas.byCoord.get('10,0') || pickFromCols(atlas, [6], hash)
-        : pickFromCols(atlas, [6, 7], hash);
-    }
-    if (tile.biome === 'coast') {
-      return hasAdjacentLand
-        ? pickFromCols(atlas, [5], hash)
-        : pickFromCols(atlas, [7, 8], hash);
+      return pickFromCols(atlas, [6, 7], hash);
     }
     if (tile.biome === 'mountain') {
-      if (tile.feature === 'natural_wonder' || tile.feature === 'geothermal_vent') {
-        return atlas.byCoord.get('10,0') || pickFromCols(atlas, [4], hash);
-      }
-      return pickFromCols(atlas, [4], hash);
+      return (
+        pickTransitionCoords(specAtlas, [[0, 0], [1, 0]], hash) ||
+        pickTransitionCoords(tempAtlas, [[4, 2], [5, 2]], hash)
+      );
     }
     if (tile.biome === 'hills') {
-      return pickFromCols(atlas, [3, 4], hash);
+      return (
+        pickTransitionCoords(specAtlas, [[2, 0]], hash) ||
+        pickTransitionCoords(transAtlas, [[4, 1], [2, 3]], hash)
+      );
     }
     if (tile.feature === 'ancient_ruins') {
-      return atlas.byCoord.get('9,2') || atlas.byCoord.get('9,4') || atlas.byCoord.get('10,1') || pickFromCols(atlas, [2], hash);
+      return atlas.byCoord.get('9,2') || atlas.byCoord.get('9,4') || pickTransitionCoords(specAtlas, [[3, 0]], hash);
     }
     if (tile.biome === 'forest') {
-      return pickFromCols(atlas, [1, 2], hash);
+      return (
+        pickTransitionCoords(specAtlas, [[3, 0]], hash) ||
+        pickTransitionCoords(transAtlas, [[1, 1], [2, 1]], hash)
+      );
     }
-    return pickFromCols(atlas, [0], hash);
+    return pickTransitionCoords(transAtlas, [[2, 1], [0, 1]], hash) || pickFromCols(atlas, [0], hash);
   }
 
   const cols = atlas.cols;
@@ -627,9 +1156,6 @@ export function getTerrainTileSprite(
 
   if (tile.biome === 'ocean') {
     return pickFromGridSlice(atlas, 3, Math.max(0, cols - 2), cols - 1, hash);
-  }
-  if (tile.biome === 'coast') {
-    return pickFromGridSlice(atlas, 3, Math.max(0, cols - 4), Math.max(0, cols - 3), hash);
   }
   if (tile.biome === 'mountain') {
     return pickFromGridSlice(atlas, 2, half, cols - 1, hash);

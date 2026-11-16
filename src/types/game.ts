@@ -15,6 +15,15 @@ export type BiomeType =
   | 'desert'
   | 'tundra';
 
+export type ShorelineType =
+  | 'none'
+  | 'sandy_beach'
+  | 'rocky_shore'
+  | 'high_cliffs'
+  | 'coastal_swamp'
+  | 'coral_reef'
+  | 'icy_shore';
+
 export type NaturalFeatureType =
   | 'none'
   | 'coal'
@@ -153,6 +162,15 @@ export interface HexTile {
   exploredBy: Record<string, boolean>; // civId -> explored
   visibleTo: Record<string, boolean>; // civId -> currently visible
   riverEdges?: boolean[];
+  shoreline?: ShorelineType;
+  clusterType?:
+    | 'oasis'
+    | 'mountain_massif'
+    | 'coral_lagoon'
+    | 'coastal_swamp_delta'
+    | 'cliff_headland'
+    | 'icy_fjord';
+  clusterRole?: 'center' | 'inner_ring' | 'outer_ring';
 }
 
 export interface UnitState {
@@ -235,6 +253,39 @@ export interface CivState {
 
 export type BarbarianDisposition = 'peaceful' | 'aggressive';
 
+export type NaturalDisasterKind =
+  | 'shore_anomaly'
+  | 'meteor_strike'
+  | 'volcano_eruption'
+  | 'river_flood';
+
+export interface NaturalDisasterVfx {
+  id: string;
+  kind: NaturalDisasterKind;
+  q: number;
+  r: number;
+  title: string;
+  damageDealt?: number;
+  timestamp: number;
+}
+
+export interface SurveyDiscoveryPopup {
+  id: string;
+  turn: number;
+  q: number;
+  r: number;
+  feature: NaturalFeatureType;
+  unitName: string;
+  coreNodeId: string;
+  coreNodeName: string;
+  domain: CoreDomain;
+  progressBefore: number;
+  progressAfter: number;
+  sparkAdded: number;
+  isFullDiscovery: boolean;
+  xpGained: number;
+}
+
 export interface BarbarianCamp {
   id: string;
   name: string;
@@ -284,6 +335,9 @@ export interface ExplorationEvent {
   q: number;
   r: number;
   unitId?: string;
+  disasterKind?: NaturalDisasterKind;
+  observerSummary?: string;
+  damageReport?: string;
   choices: ExplorationEventChoice[];
 }
 
@@ -355,7 +409,11 @@ export interface GameState {
   playerCivId: string;
   winnerCivId: string | null;
   activeEvent: ExplorationEvent | null;
+  activeSurveyPopup?: SurveyDiscoveryPopup | null;
   notices: ToastNotice[];
   recentCombats: CombatAnimation[];
+  recentDisasters?: NaturalDisasterVfx[];
+  naturalEventsByAge?: Record<number, number>;
+  lastNaturalEventTurn?: number;
   seed: number;
 }

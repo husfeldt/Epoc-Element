@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, RotateCcw, Compass, Sparkles, Shield } from 'lucide-react';
+import { Play, RotateCcw, Compass, Sparkles, Shield, FolderOpen } from 'lucide-react';
 import {
   Difficulty,
   GameConfig,
@@ -10,10 +10,12 @@ import {
 
 interface TitleScreenProps {
   hasSavedGame: boolean;
+  savedCount?: number;
   savedTurn?: number;
   savedCivName?: string;
   onStartNew: (config: GameConfig) => void;
   onResumeSaved: () => void;
+  onOpenLoadModal?: () => void;
 }
 
 const MAP_TYPES: Array<{ id: MapType; label: string; desc: string }> = [
@@ -26,10 +28,12 @@ const MAP_TYPES: Array<{ id: MapType; label: string; desc: string }> = [
 
 export const TitleScreen: React.FC<TitleScreenProps> = ({
   hasSavedGame,
+  savedCount = 0,
   savedTurn,
   savedCivName,
   onStartNew,
   onResumeSaved,
+  onOpenLoadModal,
 }) => {
   const [civName, setCivName] = useState('Nova Terran Republic');
   const [playerName, setPlayerName] = useState('Commander');
@@ -117,7 +121,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           </div>
 
           {hasSavedGame && (
-            <div className="pt-6 mt-6 border-t border-[#b89758]/25">
+            <div className="pt-6 mt-6 border-t border-[#b89758]/25 space-y-2.5">
               <button
                 type="button"
                 onClick={onResumeSaved}
@@ -128,6 +132,17 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                   Resume {savedCivName || 'Campaign'} (Turn {savedTurn ?? 1})
                 </span>
               </button>
+
+              {onOpenLoadModal && (
+                <button
+                  type="button"
+                  onClick={onOpenLoadModal}
+                  className="w-full py-2.5 px-4 rounded-xl bg-[#081118]/90 hover:bg-[#102030] border border-sky-400/40 text-sky-200 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <FolderOpen className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Load Saved Game ({savedCount})</span>
+                </button>
+              )}
             </div>
           )}
         </div>

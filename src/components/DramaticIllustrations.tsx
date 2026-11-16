@@ -1,5 +1,5 @@
 import React from 'react';
-import { CoreDomain } from '../types/game';
+import { CoreDomain, NaturalDisasterKind, NaturalFeatureType } from '../types/game';
 
 /**
  * Custom miniature illustrated artwork (48x48) for each Core Knowledge node in the DAG.
@@ -9,7 +9,8 @@ export const CoreNodeThumb: React.FC<{
   domain: CoreDomain;
   color: string;
   unlocked: boolean;
-}> = ({ nodeId, domain, color, unlocked }) => {
+  variant?: 'thumb' | 'banner' | 'lg';
+}> = ({ nodeId, domain, color, unlocked, variant = 'thumb' }) => {
   const stroke = unlocked ? '#f8f3e6' : color;
   const accent = color;
 
@@ -241,10 +242,27 @@ export const CoreNodeThumb: React.FC<{
   const vy = art ? art.row * cellH + 8 : 0;
   const vh = cellH - 16;
 
+  const containerSizeClass =
+    variant === 'banner'
+      ? 'w-full h-28 rounded-lg'
+      : variant === 'lg'
+        ? 'w-16 h-16 rounded-xl'
+        : 'w-14 h-14 rounded-lg';
+
+  const badgeSizeClass =
+    variant === 'banner'
+      ? 'bottom-1.5 right-1.5 w-6 h-6 rounded-md'
+      : variant === 'lg'
+        ? 'bottom-1 right-1 w-5 h-5 rounded'
+        : 'bottom-0.5 right-0.5 w-4 h-4 rounded';
+
+  const badgeSvgClass =
+    variant === 'banner' ? 'w-4 h-4' : variant === 'lg' ? 'w-4 h-4' : 'w-3.5 h-3.5';
+
   return (
     <div
-      className="w-11 h-11 shrink-0 rounded-lg border overflow-hidden relative bg-[#091220] shadow-inner"
-      style={{ borderColor: unlocked ? color : 'rgba(255, 255, 255, 0.16)' }}
+      className={`${containerSizeClass} shrink-0 border overflow-hidden relative bg-[#091220] shadow-inner`}
+      style={{ borderColor: unlocked ? color : 'rgba(255, 255, 255, 0.2)' }}
     >
       {art ? (
         <>
@@ -252,7 +270,7 @@ export const CoreNodeThumb: React.FC<{
             viewBox={`${vx} ${vy} 328 ${vh}`}
             preserveAspectRatio="xMidYMid slice"
             className={`w-full h-full block transition-all duration-300 ${
-              unlocked ? 'brightness-105 saturate-110' : 'brightness-75 saturate-75'
+              unlocked ? 'brightness-110 saturate-110' : 'brightness-90 saturate-90'
             }`}
           >
             <image
@@ -262,8 +280,11 @@ export const CoreNodeThumb: React.FC<{
               preserveAspectRatio="none"
             />
           </svg>
-          <div className="absolute bottom-0.5 right-0.5 w-4 h-4 rounded bg-[#070d19]/85 border border-white/20 flex items-center justify-center">
-            <svg viewBox="0 0 48 48" className="w-3.5 h-3.5">
+          <div className="absolute inset-0 bg-gradient-to-t from-[#070d19]/65 via-transparent to-transparent pointer-events-none" />
+          <div
+            className={`absolute ${badgeSizeClass} bg-[#070d19]/90 border border-white/25 flex items-center justify-center shadow`}
+          >
+            <svg viewBox="0 0 48 48" className={badgeSvgClass}>
               {renderMotif()}
             </svg>
           </div>
@@ -288,6 +309,7 @@ export const CORE_KNOWLEDGE_SHEETS = {
   matter: '/src/assets/images/core_matter_sheet_1794847712054.jpg',
   physics_energy: '/src/assets/images/core_physics_energy_sheet_1794847718732.jpg',
   life_cosmos: '/src/assets/images/core_life_cosmos_sheet_1794847736669.jpg',
+  expanded: '/src/assets/images/core_expanded_sheet.jpg',
 } as const;
 
 export const CORE_ARTWORK_MAP: Record<
@@ -525,6 +547,102 @@ export const CORE_ARTWORK_MAP: Record<
     caption: 'Quantized electron shells orbiting a dense nucleon core with alpha tracks',
     principle: 'Quantum Wavefunctions & Nuclear Binding · Discrete orbital eigenstates & E = mc².',
   },
+  gold_silver_refining: {
+    sheet: 'expanded',
+    col: 0,
+    row: 0,
+    rows: 3,
+    caption: 'Cupellation hearth pouring molten gold & silver bullion beside quartz nuggets',
+    principle: 'Selective Oxidation · Lead cupellation absorbs base oxides, leaving pure noble Au & Ag.',
+  },
+  zinc_brass_metallurgy: {
+    sheet: 'expanded',
+    col: 1,
+    row: 0,
+    rows: 3,
+    caption: 'Precision brass gears, astrolabe rings & crystalline galena and sphalerite ores',
+    principle: 'Cu-Zn Solid Solution · Alloying copper with zinc yields low-friction, non-sparking brass.',
+  },
+  aluminum_light_alloys: {
+    sheet: 'expanded',
+    col: 2,
+    row: 0,
+    rows: 3,
+    caption: 'Electrolytic Hall-Héroult reduction of bauxite into lightweight aluminum-titanium trusses',
+    principle: 'Cryolite Electrolysis · High-current reduction breaks Al₂O₃ bonds into low-density alloys.',
+  },
+  latex_natural_rubber: {
+    sheet: 'expanded',
+    col: 3,
+    row: 0,
+    rows: 3,
+    caption: 'Tapping Hevea latex sap alongside crystalline sulfur and vulcanized rubber seals',
+    principle: 'Polyisoprene Disulfide Cross-Linking · Sulfur bridges turn sticky latex into elastic rubber.',
+  },
+  synthetic_plastics: {
+    sheet: 'expanded',
+    col: 0,
+    row: 1,
+    rows: 3,
+    caption: 'Molded thermoset polymers, hydrocarbon chain models & catalytic synthesis flasks',
+    principle: 'Macromolecular Polymerization · Covalent monomer chains form lightweight, moldable plastics.',
+  },
+  cellular_anatomy: {
+    sheet: 'expanded',
+    col: 1,
+    row: 1,
+    rows: 3,
+    caption: 'Vascular arterial circulation chart & brass lens resolving plant cell walls',
+    principle: 'Cell Theory & Hemodynamics · All living tissues comprise discrete membrane-bound cells.',
+  },
+  bacteriology: {
+    sheet: 'expanded',
+    col: 2,
+    row: 1,
+    rows: 3,
+    caption: 'Stained bacterial colonies on agar Petri dishes & Penicillium antibiotic flasks',
+    principle: 'Prokaryotic Culture & Beta-Lactam Inhibition · Isolating bacteria unlocks targeted antibiotics.',
+  },
+  virology_immunology: {
+    sheet: 'expanded',
+    col: 3,
+    row: 1,
+    rows: 3,
+    caption: 'Icosahedral viral capsids neutralized by Y-shaped adaptive immunoglobulin antibodies',
+    principle: 'Antigen-Antibody Lock & Key · Sub-microscopic viral replication halted by immune memory.',
+  },
+  evolution_paleontology: {
+    sheet: 'expanded',
+    col: 0,
+    row: 2,
+    rows: 3,
+    caption: 'Sedimentary fossil strata with ammonites, theropod skull & adaptive finch morphology',
+    principle: 'Stratigraphic Superposition & Natural Selection · Differential survival shapes species over eons.',
+  },
+  planetary_kinematics: {
+    sheet: 'expanded',
+    col: 1,
+    row: 2,
+    rows: 3,
+    caption: 'Geometric trajectory parabolas, brass calipers, masonry arch & equilibrium scales',
+    principle: 'Vector Decomposition & Static Equilibrium · Parabolic motion (y = v₀t - ½gt²) and force balance.',
+  },
+  heliocentric_solar_system: {
+    sheet: 'expanded',
+    col: 2,
+    row: 2,
+    rows: 3,
+    caption: 'Concentric planetary orbits around the radiant Sun with a brass Copernican armillary sphere',
+    principle: 'Heliocentric Keplerian Ellipses · Planets sweep equal areas in equal times around the Sun (T² ∝ a³).',
+  },
+  stellar_spectroscopy: {
+    sheet: 'expanded',
+    col: 3,
+    row: 2,
+    rows: 3,
+    caption: 'Optical prism dispersing starlight into Fraunhofer absorption lines before a spiral galaxy',
+    principle: 'Quantum Spectral Absorption · Atomic transition lines reveal stellar elements and redshift.',
+  },
 };
 
 export const CoreKnowledgeArtworkCard: React.FC<{
@@ -546,13 +664,13 @@ export const CoreKnowledgeArtworkCard: React.FC<{
   const vh = cellH - 16;
 
   return (
-    <div className="rounded-xl overflow-hidden border border-[#b89758]/45 bg-[#09111d] shadow-xl relative group">
-      <div className="relative w-full h-48 overflow-hidden bg-[#070d18]">
+    <div className="rounded-xl overflow-hidden border border-[#b89758]/55 bg-[#09111d] shadow-2xl relative group">
+      <div className="relative w-full h-64 xl:h-72 overflow-hidden bg-[#070d18]">
         <svg
           viewBox={`${vx} ${vy} 328 ${vh}`}
           preserveAspectRatio="xMidYMid slice"
           className={`w-full h-full block transition-transform duration-500 group-hover:scale-105 ${
-            unlocked ? 'brightness-105 saturate-110' : 'brightness-90'
+            unlocked ? 'brightness-110 saturate-110' : 'brightness-95'
           }`}
         >
           <image
@@ -562,15 +680,15 @@ export const CoreKnowledgeArtworkCard: React.FC<{
             preserveAspectRatio="none"
           />
         </svg>
-        <div className="absolute inset-0 bg-gradient-to-t from-[#09111d] via-[#09111d]/20 to-transparent pointer-events-none" />
-        <div className="absolute inset-1.5 rounded-lg border border-[#e6c983]/25 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#09111d]/70 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute inset-1.5 rounded-lg border border-[#e6c983]/30 pointer-events-none" />
 
-        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+        <div className="absolute top-3 left-3 flex items-center gap-1.5">
           <span
-            className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider backdrop-blur-md border"
+            className="px-2.5 py-1 rounded-md text-[11px] font-semibold uppercase tracking-wider backdrop-blur-md border shadow"
             style={{
-              backgroundColor: 'rgba(9, 17, 29, 0.82)',
-              borderColor: `${color}66`,
+              backgroundColor: 'rgba(9, 17, 29, 0.85)',
+              borderColor: `${color}80`,
               color,
             }}
           >
@@ -578,45 +696,43 @@ export const CoreKnowledgeArtworkCard: React.FC<{
           </span>
         </div>
 
-        <div className="absolute top-2.5 right-2.5">
+        <div className="absolute top-3 right-3">
           {unlocked ? (
-            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/25 text-emerald-200 border border-emerald-400/50 backdrop-blur-md">
+            <span className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-500/30 text-emerald-200 border border-emerald-400/60 backdrop-blur-md shadow">
               ✓ Discovered
             </span>
           ) : eligible ? (
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono-tabular font-semibold bg-sky-500/25 text-sky-200 border border-sky-400/50 backdrop-blur-md">
+            <span className="px-2.5 py-1 rounded-md text-[11px] font-mono-tabular font-semibold bg-sky-500/30 text-sky-200 border border-sky-400/60 backdrop-blur-md shadow">
               Researching · {progress}%
             </span>
           ) : (
-            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900/80 text-slate-300 border border-white/15 backdrop-blur-md">
+            <span className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-900/85 text-slate-300 border border-white/20 backdrop-blur-md shadow">
               Locked Concept
             </span>
           )}
         </div>
-
-        <div className="absolute bottom-2 left-3 right-3">
-          <div className="text-[11px] font-medium text-[#f8f3e6] drop-shadow leading-snug">
-            {art.caption}
-          </div>
-        </div>
       </div>
 
-      <div className="px-3 py-2 bg-[#0c1626] border-t border-white/10 text-[11px] text-slate-300 leading-relaxed">
-        <span className="font-semibold text-[#e6c983]">Physical Principle: </span>
-        {art.principle}
+      <div className="px-3.5 py-2.5 bg-[#0c1626] border-t border-white/10 space-y-1.5">
+        <div className="text-xs font-medium text-[#f8f3e6] leading-snug">{art.caption}</div>
+        <div className="text-[11px] text-slate-300 leading-relaxed">
+          <span className="font-semibold text-[#e6c983]">Physical Principle: </span>
+          {art.principle}
+        </div>
       </div>
     </div>
   );
 };
 
 /**
- * Rich thematic illustration banner (240x88) for every Invention card in the Research & Discovery Tree.
+ * Rich thematic illustration banner for every Invention card in the Research & Discovery Tree.
  */
 export const InventionBannerIllustration: React.FC<{
   invId: string;
   category: string;
   unlocked: boolean;
-}> = ({ invId, category, unlocked }) => {
+  primaryCoreId?: string;
+}> = ({ invId, category, unlocked, primaryCoreId }) => {
   const palette =
     category === 'military'
       ? { skyTop: '#2b1215', skyBot: '#130b12', accent: '#f87171', gold: '#fbbf24' }
@@ -769,6 +885,89 @@ export const InventionBannerIllustration: React.FC<{
             <path d="M110 48 Q134 38 150 44" fill="none" stroke="#38bdf8" strokeWidth="2" />
           </g>
         );
+      case 'tally_numbers':
+        return (
+          <g>
+            <rect x="42" y="20" width="156" height="48" rx="6" fill="#78350f" stroke="#d97706" strokeWidth="2" />
+            {/* Tally marks IIII with diagonal slash */}
+            <g stroke="#fef3c7" strokeWidth="3" strokeLinecap="round">
+              <line x1="64" y1="30" x2="64" y2="56" />
+              <line x1="76" y1="30" x2="76" y2="56" />
+              <line x1="88" y1="30" x2="88" y2="56" />
+              <line x1="100" y1="30" x2="100" y2="56" />
+              <line x1="58" y1="52" x2="106" y2="34" stroke="#fbbf24" />
+              <line x1="128" y1="30" x2="128" y2="56" />
+              <line x1="140" y1="30" x2="140" y2="56" />
+              <line x1="152" y1="30" x2="152" y2="56" />
+            </g>
+            <circle cx="176" cy="36" r="6" fill="#eab308" />
+            <circle cx="176" cy="52" r="6" fill="#eab308" />
+          </g>
+        );
+      case 'pictographic_writing':
+      case 'literacy_reading':
+        return (
+          <g>
+            <rect x="40" y="18" width="74" height="52" rx="4" fill="#d97706" stroke="#fde68a" strokeWidth="1.8" />
+            <line x1="52" y1="30" x2="100" y2="30" stroke="#451a03" strokeWidth="2.4" strokeDasharray="6 4" />
+            <line x1="52" y1="42" x2="96" y2="42" stroke="#451a03" strokeWidth="2.4" strokeDasharray="8 3" />
+            <line x1="52" y1="54" x2="102" y2="54" stroke="#451a03" strokeWidth="2.4" strokeDasharray="5 4" />
+            <path d="M130 22 H194 V66 H130 Z" fill="#fef3c7" stroke="#b45309" strokeWidth="2" />
+            <circle cx="130" cy="44" r="5" fill="#92400e" />
+            <circle cx="194" cy="44" r="5" fill="#92400e" />
+            <text x="162" y="49" textAnchor="middle" fill="#78350f" fontSize="16" fontWeight="700" fontFamily="Cinzel, serif">
+              Α Β Γ
+            </text>
+          </g>
+        );
+      case 'basic_arithmetic_geometry':
+        return (
+          <g>
+            <polygon points="48,66 96,20 128,66" fill="rgba(56,189,248,0.2)" stroke="#38bdf8" strokeWidth="2.4" />
+            <circle cx="168" cy="44" r="22" fill="none" stroke="#fbbf24" strokeWidth="2.2" strokeDasharray="5 3" />
+            <line x1="168" y1="44" x2="190" y2="44" stroke="#fef08a" strokeWidth="2" />
+            <text x="88" y="58" textAnchor="middle" fill="#f8fafc" fontSize="13" fontWeight="700" fontFamily="monospace">
+              a²+b²=c²
+            </text>
+          </g>
+        );
+      case 'algebraic_equations':
+        return (
+          <g>
+            <line x1="36" y1="68" x2="204" y2="68" stroke="#64748b" strokeWidth="1.8" />
+            <line x1="52" y1="14" x2="52" y2="74" stroke="#64748b" strokeWidth="1.8" />
+            <path d="M52 66 Q116 10 188 64" fill="none" stroke="#38bdf8" strokeWidth="3" />
+            <text x="136" y="34" textAnchor="middle" fill="#fde047" fontSize="15" fontWeight="700" fontFamily="serif">
+              x = −b ± √Δ
+            </text>
+          </g>
+        );
+      case 'calculus_complex_math':
+        return (
+          <g>
+            <path d="M36 56 C68 12, 108 12, 140 56 S200 72, 212 24" fill="none" stroke="#c084fc" strokeWidth="2.8" />
+            <text x="72" y="54" textAnchor="middle" fill="#fde047" fontSize="22" fontWeight="700" fontFamily="serif">
+              ∫ f(z)dz
+            </text>
+            <text x="172" y="42" textAnchor="middle" fill="#38bdf8" fontSize="16" fontWeight="700" fontFamily="serif">
+              e^(iπ) + 1 = 0
+            </text>
+          </g>
+        );
+      case 'vulcanized_rubber_plastics':
+        return (
+          <g>
+            <circle cx="84" cy="46" r="22" fill="#1e293b" stroke="#94a3b8" strokeWidth="4" />
+            <circle cx="84" cy="46" r="10" fill="#475569" stroke="#e2e8f0" strokeWidth="2" />
+            <polyline points="132,56 148,32 168,56 184,32 202,56" fill="none" stroke="#f59e0b" strokeWidth="3" />
+            <circle cx="132" cy="56" r="4.5" fill="#38bdf8" />
+            <circle cx="148" cy="32" r="4.5" fill="#fbbf24" />
+            <circle cx="168" cy="56" r="4.5" fill="#34d399" />
+            <circle cx="184" cy="32" r="4.5" fill="#fbbf24" />
+            <circle cx="202" cy="56" r="4.5" fill="#38bdf8" />
+          </g>
+        );
+      case 'antibiotics_virology_therapy':
       case 'sanitation_vaccines':
       default:
         return (
@@ -781,31 +980,58 @@ export const InventionBannerIllustration: React.FC<{
     }
   };
 
+  const coreArt = primaryCoreId ? CORE_ARTWORK_MAP[primaryCoreId] : undefined;
+  const cellH = coreArt && coreArt.rows === 2 ? 384 : 256;
+  const vx = coreArt ? coreArt.col * 344 + 8 : 0;
+  const vy = coreArt ? coreArt.row * cellH + 8 : 0;
+  const vh = cellH - 16;
+
   return (
-    <div className="w-full h-20 rounded-lg overflow-hidden border border-white/10 relative">
-      <svg viewBox="0 0 240 88" preserveAspectRatio="xMidYMid slice" className="w-full h-full">
-        <defs>
-          <linearGradient id={`inv_${invId}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={palette.skyTop} />
-            <stop offset="100%" stopColor={palette.skyBot} />
-          </linearGradient>
-        </defs>
-        <rect width="240" height="88" fill={`url(#inv_${invId})`} />
-        {renderScene()}
-        {unlocked && (
-          <rect
-            x="1.5"
-            y="1.5"
-            width="237"
-            height="85"
-            rx="6"
-            fill="none"
-            stroke="#fbbf24"
-            strokeOpacity="0.45"
-            strokeWidth="1.5"
-          />
-        )}
-      </svg>
+    <div className="w-full h-36 rounded-lg overflow-hidden border border-white/15 relative bg-[#070d18] flex">
+      {coreArt && (
+        <div className="w-1/2 h-full relative overflow-hidden border-r border-white/10">
+          <svg
+            viewBox={`${vx} ${vy} 328 ${vh}`}
+            preserveAspectRatio="xMidYMid slice"
+            className={`w-full h-full block ${
+              unlocked ? 'brightness-105 saturate-110' : 'brightness-90 saturate-90'
+            }`}
+          >
+            <image
+              href={CORE_KNOWLEDGE_SHEETS[coreArt.sheet]}
+              width="1376"
+              height="768"
+              preserveAspectRatio="none"
+            />
+          </svg>
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-[#091120]/85 pointer-events-none" />
+        </div>
+      )}
+      <div className={`${coreArt ? 'w-1/2' : 'w-full'} h-full relative`}>
+        <svg viewBox="0 0 240 88" preserveAspectRatio="xMidYMid slice" className="w-full h-full">
+          <defs>
+            <linearGradient id={`inv_${invId}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={palette.skyTop} />
+              <stop offset="100%" stopColor={palette.skyBot} />
+            </linearGradient>
+          </defs>
+          <rect width="240" height="88" fill={`url(#inv_${invId})`} />
+          {renderScene()}
+          {unlocked && (
+            <rect
+              x="1.5"
+              y="1.5"
+              width="237"
+              height="85"
+              rx="6"
+              fill="none"
+              stroke="#fbbf24"
+              strokeOpacity="0.45"
+              strokeWidth="1.5"
+            />
+          )}
+        </svg>
+      </div>
     </div>
   );
 };
@@ -995,5 +1221,469 @@ export const DramaticScenePlate: React.FC<{
       {/* Subtle brass corner filigree */}
       <path d="M8 22 V8 H22 M458 8 H472 V22 M8 148 V162 H22 M458 162 H472 V148" fill="none" stroke="#e6c983" strokeOpacity="0.65" strokeWidth="1.6" />
     </svg>
+  );
+};
+
+const NATURAL_PHENOMENA_SHEET = '/src/assets/images/natural_phenomena_sheet.jpg';
+
+const DISASTER_PANEL_MAP: Record<
+  NaturalDisasterKind,
+  { col: number; row: number; badge: string; accent: string }
+> = {
+  shore_anomaly: {
+    col: 0,
+    row: 0,
+    badge: 'Coastal Gale & Pelagic Drift',
+    accent: '#38bdf8',
+  },
+  meteor_strike: {
+    col: 1,
+    row: 0,
+    badge: 'Celestial Bolide & Crater',
+    accent: '#c084fc',
+  },
+  volcano_eruption: {
+    col: 0,
+    row: 1,
+    badge: 'Volcanic Pyroclasm',
+    accent: '#f97316',
+  },
+  river_flood: {
+    col: 1,
+    row: 1,
+    badge: 'Alluvial Deluge & Exposed Strata',
+    accent: '#34d399',
+  },
+};
+
+export const NaturalDisasterIllustration: React.FC<{
+  kind: NaturalDisasterKind;
+  hasDamage?: boolean;
+}> = ({ kind, hasDamage }) => {
+  const meta = DISASTER_PANEL_MAP[kind] || DISASTER_PANEL_MAP.meteor_strike;
+  const vx = meta.col * 688 + 10;
+  const vy = meta.row * 384 + 10;
+
+  return (
+    <div className="relative w-full h-60 overflow-hidden bg-[#070d18] border-b border-[#b89758]/40">
+      <svg
+        viewBox={`${vx} ${vy} 668 364`}
+        preserveAspectRatio="xMidYMid slice"
+        className="w-full h-full block brightness-105 saturate-110"
+      >
+        <image
+          href={NATURAL_PHENOMENA_SHEET}
+          width="1376"
+          height="768"
+          preserveAspectRatio="none"
+        />
+      </svg>
+      <div className="absolute inset-0 bg-gradient-to-t from-[#0c1822] via-transparent to-[#070d18]/30 pointer-events-none" />
+      <div className="absolute inset-2 rounded-xl border border-[#e6c983]/30 pointer-events-none" />
+
+      <div className="absolute top-3.5 left-3.5 flex items-center gap-2">
+        <span
+          className="px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider backdrop-blur-md border shadow-lg"
+          style={{
+            backgroundColor: 'rgba(9, 17, 29, 0.85)',
+            borderColor: `${meta.accent}88`,
+            color: meta.accent,
+          }}
+        >
+          {meta.badge}
+        </span>
+      </div>
+
+      <div className="absolute top-3.5 right-3.5">
+        {hasDamage ? (
+          <span className="px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider bg-rose-500/30 text-rose-200 border border-rose-400/60 backdrop-blur-md shadow-lg">
+            ⚠ Destructive Shockwave
+          </span>
+        ) : (
+          <span className="px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider bg-emerald-500/25 text-emerald-200 border border-emerald-400/50 backdrop-blur-md shadow-lg">
+            ✦ Scientific Phenomenon
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+function buildJigsawPiecePaths(vx: number, vy: number, W: number, H: number): string[] {
+  const x0 = vx;
+  const xm = vx + W * 0.5;
+  const x1 = vx + W;
+  const y0 = vy;
+  const ym = vy + H * 0.5;
+  const y1 = vy + H;
+  const r = Math.round(Math.min(W, H) * 0.085);
+
+  // Piece 0: Top-Left (right tab protrudes +r into Piece 1; bottom tab protrudes +r into Piece 2)
+  const p0 = [
+    `M ${x0} ${y0}`,
+    `L ${xm} ${y0}`,
+    `L ${xm} ${y0 + H * 0.16}`,
+    `C ${xm + r * 0.25} ${y0 + H * 0.16}, ${xm + r} ${y0 + H * 0.11}, ${xm + r} ${y0 + H * 0.25}`,
+    `C ${xm + r} ${y0 + H * 0.39}, ${xm + r * 0.25} ${y0 + H * 0.34}, ${xm} ${y0 + H * 0.34}`,
+    `L ${xm} ${ym}`,
+    `L ${x0 + W * 0.34} ${ym}`,
+    `C ${x0 + W * 0.34} ${ym + r * 0.25}, ${x0 + W * 0.39} ${ym + r}, ${x0 + W * 0.25} ${ym + r}`,
+    `C ${x0 + W * 0.11} ${ym + r}, ${x0 + W * 0.16} ${ym + r * 0.25}, ${x0 + W * 0.16} ${ym}`,
+    `L ${x0} ${ym}`,
+    'Z',
+  ].join(' ');
+
+  // Piece 1: Top-Right (left blank matches Piece 0's +r tab; bottom socket matches Piece 3's -r tab)
+  const p1 = [
+    `M ${xm} ${y0}`,
+    `L ${x1} ${y0}`,
+    `L ${x1} ${ym}`,
+    `L ${xm + W * 0.34} ${ym}`,
+    `C ${xm + W * 0.34} ${ym - r * 0.25}, ${xm + W * 0.39} ${ym - r}, ${xm + W * 0.25} ${ym - r}`,
+    `C ${xm + W * 0.11} ${ym - r}, ${xm + W * 0.16} ${ym - r * 0.25}, ${xm + W * 0.16} ${ym}`,
+    `L ${xm} ${ym}`,
+    `L ${xm} ${y0 + H * 0.34}`,
+    `C ${xm + r * 0.25} ${y0 + H * 0.34}, ${xm + r} ${y0 + H * 0.39}, ${xm + r} ${y0 + H * 0.25}`,
+    `C ${xm + r} ${y0 + H * 0.11}, ${xm + r * 0.25} ${y0 + H * 0.16}, ${xm} ${y0 + H * 0.16}`,
+    'Z',
+  ].join(' ');
+
+  // Piece 2: Bottom-Left (top socket matches Piece 0's +r tab; right socket matches Piece 3's -r tab)
+  const p2 = [
+    `M ${x0} ${ym}`,
+    `L ${x0 + W * 0.16} ${ym}`,
+    `C ${x0 + W * 0.16} ${ym + r * 0.25}, ${x0 + W * 0.11} ${ym + r}, ${x0 + W * 0.25} ${ym + r}`,
+    `C ${x0 + W * 0.39} ${ym + r}, ${x0 + W * 0.34} ${ym + r * 0.25}, ${x0 + W * 0.34} ${ym}`,
+    `L ${xm} ${ym}`,
+    `L ${xm} ${ym + H * 0.16}`,
+    `C ${xm - r * 0.25} ${ym + H * 0.16}, ${xm - r} ${ym + H * 0.11}, ${xm - r} ${ym + H * 0.25}`,
+    `C ${xm - r} ${ym + H * 0.39}, ${xm - r * 0.25} ${ym + H * 0.34}, ${xm} ${ym + H * 0.34}`,
+    `L ${xm} ${y1}`,
+    `L ${x0} ${y1}`,
+    'Z',
+  ].join(' ');
+
+  // Piece 3: Bottom-Right (top tab protrudes -r into Piece 1; left tab protrudes -r into Piece 2)
+  const p3 = [
+    `M ${xm} ${ym}`,
+    `L ${xm + W * 0.16} ${ym}`,
+    `C ${xm + W * 0.16} ${ym - r * 0.25}, ${xm + W * 0.11} ${ym - r}, ${xm + W * 0.25} ${ym - r}`,
+    `C ${xm + W * 0.39} ${ym - r}, ${xm + W * 0.34} ${ym - r * 0.25}, ${xm + W * 0.34} ${ym}`,
+    `L ${x1} ${ym}`,
+    `L ${x1} ${y1}`,
+    `L ${xm} ${y1}`,
+    `L ${xm} ${ym + H * 0.34}`,
+    `C ${xm - r * 0.25} ${ym + H * 0.34}, ${xm - r} ${ym + H * 0.39}, ${xm - r} ${ym + H * 0.25}`,
+    `C ${xm - r} ${ym + H * 0.11}, ${xm - r * 0.25} ${ym + H * 0.16}, ${xm} ${ym + H * 0.16}`,
+    'Z',
+  ].join(' ');
+
+  return [p0, p1, p2, p3];
+}
+
+function progressToPieceCount(pct: number): number {
+  if (pct >= 100) return 4;
+  if (pct >= 70) return 3;
+  if (pct >= 38) return 2;
+  if (pct > 0) return 1;
+  return 0;
+}
+
+export const FeatureSpecimenBadge: React.FC<{ feature: NaturalFeatureType }> = ({ feature }) => {
+  const meta: Record<
+    NaturalFeatureType,
+    { label: string; sub: string; bg: string; border: string; accent: string }
+  > = {
+    copper: {
+      label: 'Native Copper & Malachite Vein',
+      sub: 'Metallic Ore Specimen',
+      bg: 'rgba(217, 119, 6, 0.18)',
+      border: 'rgba(251, 191, 36, 0.5)',
+      accent: '#f59e0b',
+    },
+    iron: {
+      label: 'Hematite & Magnetite Iron Lode',
+      sub: 'Ferrous Mineral Specimen',
+      bg: 'rgba(148, 163, 184, 0.18)',
+      border: 'rgba(203, 213, 225, 0.5)',
+      accent: '#cbd5e1',
+    },
+    coal: {
+      label: 'Bituminous Carbon Seam',
+      sub: 'High-Heat Fuel Deposit',
+      bg: 'rgba(51, 65, 85, 0.35)',
+      border: 'rgba(249, 115, 22, 0.5)',
+      accent: '#fb923c',
+    },
+    rare_flora: {
+      label: 'Luminous Botanical Specimen',
+      sub: 'Endemic Medicinal Flora',
+      bg: 'rgba(16, 185, 129, 0.18)',
+      border: 'rgba(52, 211, 153, 0.5)',
+      accent: '#34d399',
+    },
+    fossils: {
+      label: 'Petrified Megafauna Strata',
+      sub: 'Paleontological Specimen',
+      bg: 'rgba(234, 179, 8, 0.16)',
+      border: 'rgba(253, 224, 71, 0.5)',
+      accent: '#fde047',
+    },
+    geothermal_vent: {
+      label: 'Pressurized Geothermal Fumarole',
+      sub: 'Thermal & Sulfur Vent',
+      bg: 'rgba(249, 115, 22, 0.18)',
+      border: 'rgba(251, 146, 60, 0.55)',
+      accent: '#fb923c',
+    },
+    ancient_ruins: {
+      label: 'Weathered Precursor Reliquary',
+      sub: 'Archaeological Artifact',
+      bg: 'rgba(168, 85, 247, 0.18)',
+      border: 'rgba(192, 132, 252, 0.5)',
+      accent: '#c084fc',
+    },
+    natural_wonder: {
+      label: 'Extraordinary Natural Marvel',
+      sub: 'World Landmark',
+      bg: 'rgba(56, 189, 248, 0.18)',
+      border: 'rgba(103, 232, 249, 0.5)',
+      accent: '#38bdf8',
+    },
+    none: {
+      label: 'Field Observation',
+      sub: 'Empirical Survey',
+      bg: 'rgba(56, 189, 248, 0.15)',
+      border: 'rgba(148, 163, 184, 0.4)',
+      accent: '#38bdf8',
+    },
+  };
+
+  const m = meta[feature] || meta.none;
+
+  return (
+    <div
+      className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl border"
+      style={{ backgroundColor: m.bg, borderColor: m.border }}
+    >
+      <svg viewBox="0 0 44 44" className="w-11 h-11 shrink-0 rounded-lg bg-[#070d18]/90 border border-white/15 p-1">
+        {feature === 'copper' && (
+          <g>
+            <polygon points="8,32 14,14 26,10 36,20 32,34 18,36" fill="#047857" stroke="#34d399" strokeWidth="1.4" />
+            <polygon points="16,28 22,15 32,18 29,31" fill="#d97706" stroke="#fde047" strokeWidth="1.4" />
+            <circle cx="25" cy="22" r="2.2" fill="#fef08a" />
+          </g>
+        )}
+        {feature === 'iron' && (
+          <g>
+            <polygon points="9,32 13,14 25,11 36,19 33,34 17,35" fill="#475569" stroke="#cbd5e1" strokeWidth="1.5" />
+            <polyline points="13,14 23,24 33,34" fill="none" stroke="#f8fafc" strokeWidth="1.5" />
+            <circle cx="28" cy="17" r="2" fill="#38bdf8" />
+          </g>
+        )}
+        {feature === 'coal' && (
+          <g>
+            <polygon points="8,31 14,13 27,12 36,22 31,35 16,35" fill="#1e293b" stroke="#94a3b8" strokeWidth="1.4" />
+            <path d="M16 28 Q22 21 29 27" stroke="#f97316" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+          </g>
+        )}
+        {feature === 'rare_flora' && (
+          <g>
+            <path d="M22 36 V14" stroke="#10b981" strokeWidth="2.4" />
+            <circle cx="22" cy="14" r="6" fill="#34d399" fillOpacity="0.45" stroke="#6ee7b7" strokeWidth="1.4" />
+            <circle cx="22" cy="14" r="2.5" fill="#fef08a" />
+            <path d="M22 26 C14 26, 12 20, 15 16 C19 17, 22 21, 22 26 Z" fill="#10b981" />
+            <path d="M22 23 C30 23, 32 17, 29 13 C25 14, 22 18, 22 23 Z" fill="#34d399" />
+          </g>
+        )}
+        {feature === 'fossils' && (
+          <g>
+            <circle cx="22" cy="22" r="12" fill="#78350f" stroke="#fde047" strokeWidth="1.6" />
+            <path d="M22 22 m-2 0 a 2 2 0 1 0 4 0 a 4 4 0 1 0 -8 0 a 6 6 0 1 0 12 0 a 8 8 0 1 0 -16 0" fill="none" stroke="#fef3c7" strokeWidth="1.6" />
+          </g>
+        )}
+        {feature !== 'copper' &&
+          feature !== 'iron' &&
+          feature !== 'coal' &&
+          feature !== 'rare_flora' &&
+          feature !== 'fossils' && (
+            <g>
+              <polygon points="22,8 34,20 28,35 16,35 10,20" fill="#b45309" stroke="#fde047" strokeWidth="1.5" />
+              <circle cx="22" cy="22" r="4.5" fill="#38bdf8" />
+            </g>
+          )}
+      </svg>
+      <div className="min-w-0 flex-1">
+        <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: m.accent }}>
+          {m.sub}
+        </div>
+        <div className="text-sm font-bold text-white truncate">{m.label}</div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Renders a Core Knowledge oil painting as an interlocking 4-piece Jigsaw Puzzle:
+ * - Unrevealed pieces are rendered heavily blurred & veiled with jigsaw contours.
+ * - Revealed piece(s) are rendered 100% crystal-clear, with the newly discovered puzzle brick
+ *   highlighted by a glowing golden jigsaw bevel!
+ */
+export const CoreKnowledgePuzzlePlate: React.FC<{
+  nodeId: string;
+  progressBefore: number;
+  progressAfter: number;
+  accentColor: string;
+}> = ({ nodeId, progressBefore, progressAfter, accentColor }) => {
+  const art = CORE_ARTWORK_MAP[nodeId] || CORE_ARTWORK_MAP.copper_smelting;
+  const cellH = art.rows === 2 ? 384 : 256;
+  const vx = art.col * 344 + 8;
+  const vy = art.row * cellH + 8;
+  const vw = 328;
+  const vh = cellH - 16;
+
+  const piecePaths = buildJigsawPiecePaths(vx, vy, vw, vh);
+  const prevPieces = progressToPieceCount(progressBefore);
+  const nowPieces = Math.max(1, progressToPieceCount(progressAfter));
+
+  const pieceCenters = [
+    { x: vx + vw * 0.25, y: vy + vh * 0.25, label: 'Piece I' },
+    { x: vx + vw * 0.75, y: vy + vh * 0.25, label: 'Piece II' },
+    { x: vx + vw * 0.25, y: vy + vh * 0.75, label: 'Piece III' },
+    { x: vx + vw * 0.75, y: vy + vh * 0.75, label: 'Piece IV' },
+  ];
+
+  const clipId = `puzzle_clear_clip_${nodeId}_${nowPieces}`;
+  const blurFilterId = `puzzle_blur_filter_${nodeId}`;
+
+  return (
+    <div className="relative w-full h-64 overflow-hidden bg-[#060b14] border-b border-[#b89758]/40 select-none">
+      <svg
+        viewBox={`${vx} ${vy} ${vw} ${vh}`}
+        preserveAspectRatio="xMidYMid slice"
+        className="w-full h-full block"
+      >
+        <defs>
+          {/* Strong Gaussian Blur + Desaturation for unrevealed puzzle pieces */}
+          <filter id={blurFilterId} x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="11" result="blurred" />
+            <feColorMatrix
+              in="blurred"
+              type="matrix"
+              values="0.45 0.15 0.15 0 0
+                      0.15 0.45 0.15 0 0
+                      0.15 0.15 0.50 0 0
+                      0    0    0    1 0"
+            />
+          </filter>
+
+          {/* Clip path containing ONLY the unlocked/revealed jigsaw puzzle bricks */}
+          <clipPath id={clipId}>
+            {piecePaths.slice(0, nowPieces).map((d, idx) => (
+              <path key={`clip_${idx}`} d={d} />
+            ))}
+          </clipPath>
+        </defs>
+
+        {/* LAYER 1: Blurred & Veiled Full Artwork (shown in locked puzzle regions) */}
+        <image
+          href={CORE_KNOWLEDGE_SHEETS[art.sheet]}
+          width="1376"
+          height="768"
+          preserveAspectRatio="none"
+          filter={`url(#${blurFilterId})`}
+        />
+        <rect x={vx} y={vy} width={vw} height={vh} fill="rgba(7, 13, 25, 0.42)" />
+
+        {/* LAYER 2: Frosted Jigsaw Outlines & Lock Markers on Unrevealed Pieces */}
+        {piecePaths.map((d, idx) => {
+          if (idx < nowPieces) return null;
+          const c = pieceCenters[idx];
+          return (
+            <g key={`locked_${idx}`}>
+              <path
+                d={d}
+                fill="rgba(9, 16, 28, 0.36)"
+                stroke="rgba(148, 163, 184, 0.42)"
+                strokeWidth="2"
+                strokeDasharray="6 4"
+              />
+              <circle
+                cx={c.x}
+                cy={c.y}
+                r="18"
+                fill="rgba(9, 17, 29, 0.78)"
+                stroke="rgba(255, 255, 255, 0.22)"
+                strokeWidth="1.5"
+              />
+              <text
+                x={c.x}
+                y={c.y + 5}
+                textAnchor="middle"
+                fill="rgba(203, 213, 225, 0.72)"
+                fontSize="15"
+                fontWeight="700"
+                fontFamily="Cinzel, serif"
+              >
+                ?
+              </text>
+            </g>
+          );
+        })}
+
+        {/* LAYER 3: Crystal-Clear Unblurred Artwork inside Revealed Jigsaw Puzzle Pieces! */}
+        <g clipPath={`url(#${clipId})`}>
+          <image
+            href={CORE_KNOWLEDGE_SHEETS[art.sheet]}
+            width="1376"
+            height="768"
+            preserveAspectRatio="none"
+          />
+        </g>
+
+        {/* LAYER 4: Glowing Jigsaw Borders around Revealed Pieces (especially newly snapped brick!) */}
+        {piecePaths.slice(0, nowPieces).map((d, idx) => {
+          const isNewlyUnlockedBrick = idx >= prevPieces || idx === nowPieces - 1;
+          return (
+            <path
+              key={`clear_border_${idx}`}
+              d={d}
+              fill="none"
+              stroke={isNewlyUnlockedBrick ? '#fde047' : accentColor}
+              strokeWidth={isNewlyUnlockedBrick ? '3.4' : '2.0'}
+              strokeOpacity={isNewlyUnlockedBrick ? '0.96' : '0.75'}
+            />
+          );
+        })}
+      </svg>
+
+      {/* Top Overlay Badges */}
+      <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
+        <span
+          className="px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider backdrop-blur-md border shadow-lg"
+          style={{
+            backgroundColor: 'rgba(9, 17, 29, 0.88)',
+            borderColor: `${accentColor}88`,
+            color: accentColor,
+          }}
+        >
+          {nowPieces >= 4
+            ? '★ 4 / 4 Puzzle Pieces · Full Discovery!'
+            : `🧩 ${nowPieces} / 4 Puzzle Pieces Clear`}
+        </span>
+      </div>
+
+      <div className="absolute top-3 right-3 pointer-events-none">
+        <span className="px-2.5 py-1 rounded-md text-[11px] font-mono-tabular font-bold bg-amber-500/25 text-amber-200 border border-amber-400/60 backdrop-blur-md shadow-lg">
+          {progressBefore}% → {progressAfter}%
+        </span>
+      </div>
+
+      <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between pointer-events-none">
+        <span className="px-2.5 py-1 rounded bg-[#070d18]/85 border border-white/15 text-[11px] text-[#f8f3e6] font-medium truncate">
+          {art.caption}
+        </span>
+      </div>
+    </div>
   );
 };

@@ -219,6 +219,41 @@ class SoundFxEngine {
     this.playTone(659.25, 0.7, 'sine', 0.05, 0.24);
   }
 
+  playNaturalDisaster(
+    kind: 'shore_anomaly' | 'meteor_strike' | 'volcano_eruption' | 'river_flood' = 'meteor_strike'
+  ) {
+    if (kind === 'meteor_strike') {
+      // Descending cosmic fireball whistle + earth-shattering crater boom + crystalline shimmer
+      this.playTone(1760, 0.44, 'sawtooth', 0.09, 0, 130, 2600);
+      this.playNoiseBurst(0.42, 'bandpass', 2800, 320, 2.2, 0.14, 0);
+      this.playTone(68, 0.75, 'sine', 0.24, 0.36, 22);
+      this.playNoiseBurst(0.75, 'lowpass', 1600, 90, 0.9, 0.24, 0.36);
+      this.playTone(1174.66, 0.65, 'sine', 0.06, 0.68);
+      this.playTone(1567.98, 0.75, 'triangle', 0.05, 0.78);
+    } else if (kind === 'volcano_eruption') {
+      // Subterranean tectonic rumble + explosive pyroclastic blast + lightning crackle
+      this.playTone(54, 0.9, 'sawtooth', 0.18, 0, 26, 240);
+      this.playNoiseBurst(0.85, 'lowpass', 850, 95, 0.8, 0.22, 0);
+      this.playTone(82, 0.68, 'sine', 0.22, 0.24, 24);
+      this.playNoiseBurst(0.55, 'bandpass', 2200, 420, 1.4, 0.16, 0.28);
+      this.playBrassVoice(146.83, 0.75, 0.11, 0.35);
+    } else if (kind === 'river_flood') {
+      // Thunderclap + surging whitewater deluge + resonant discovery chord
+      this.playNoiseBurst(0.28, 'lowpass', 1800, 180, 1.1, 0.18, 0);
+      this.playTone(76, 0.55, 'sine', 0.18, 0, 32);
+      this.playNoiseBurst(0.85, 'bandpass', 420, 960, 1.3, 0.16, 0.15);
+      this.playTone(293.66, 0.55, 'triangle', 0.08, 0.42);
+      this.playTone(440.0, 0.65, 'sine', 0.07, 0.52);
+    } else {
+      // Storm-tossed shore anomaly: crashing gale surf + mysterious harmonic resonance
+      this.playNoiseBurst(0.72, 'bandpass', 920, 240, 1.5, 0.17, 0);
+      this.playTone(92, 0.55, 'sine', 0.15, 0.05, 44);
+      this.playTone(392.0, 0.65, 'triangle', 0.08, 0.28);
+      this.playTone(587.33, 0.72, 'sine', 0.08, 0.38);
+      this.playTone(880.0, 0.85, 'sine', 0.065, 0.48);
+    }
+  }
+
   playTurnEnd() {
     this.playTone(196, 0.26, 'triangle', 0.08, 0);
     this.playTone(293.66, 0.32, 'sine', 0.065, 0.09);

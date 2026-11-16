@@ -8,6 +8,7 @@ import {
   GameState,
   HexTile,
   NaturalFeatureType,
+  ShorelineType,
   TemperatureZone,
   UnitState,
 } from '../types/game';
@@ -122,7 +123,7 @@ export function generateWorld(config: GameConfig): GameState {
     config.mapType === 'archipelago'
       ? 22
       : config.mapType === 'pangaea'
-        ? 5
+        ? 6
         : config.mapType === 'inland_sea'
           ? 12
           : 11;
@@ -136,28 +137,82 @@ export function generateWorld(config: GameConfig): GameState {
         config.mapType === 'archipelago'
           ? 2.2 + rng() * 2.5
           : config.mapType === 'pangaea'
-            ? 5.5 + rng() * 4.5
-            : 3.4 + rng() * 3.8,
+            ? 5.8 + rng() * 4.8
+            : 3.6 + rng() * 4.0,
       weight: 0.65 + rng() * 0.55,
     });
   }
 
+  // Large regional moisture basins so forests, deserts, and plains form expansive contiguous landscapes
+  const moistureBlobs: Array<{ x: number; y: number; radius: number; delta: number }> = [];
+  const moistureBlobCount = 14;
+  for (let i = 0; i < moistureBlobCount; i++) {
+    moistureBlobs.push({
+      x: rng() * width,
+      y: rng() * height,
+      radius: 4.8 + rng() * 6.5,
+      delta: (i % 2 === 0 ? 1 : -1) * (0.38 + rng() * 0.35),
+    });
+  }
+
+  // Coherent tectonic hill/mountain ridges for natural upland chains and foothills
+  const ridgeSeeds: Array<{
+    x: number;
+    y: number;
+    cosA: number;
+    sinA: number;
+    len: number;
+    width: number;
+    strength: number;
+  }> = [];
+  const ridgeCount = config.mapSize === 'large' ? 7 : config.mapSize === 'medium' ? 5 : 4;
+  for (let i = 0; i < ridgeCount; i++) {
+    const ang = rng() * Math.PI;
+    ridgeSeeds.push({
+      x: (0.18 + rng() * 0.64) * width,
+      y: (0.18 + rng() * 0.64) * height,
+      cosA: Math.cos(ang),
+      sinA: Math.sin(ang),
+      len: 4.5 + rng() * 5.5,
+      width: 1.6 + rng() * 1.2,
+      strength: 0.28 + rng() * 0.22,
+    });
+  }
+
+  const latPhase = rng() * Math.PI * 2;
+  const lonFreq = 2.0 + rng() * 0.8;
+
   const tiles: Record<string, HexTile> = {};
   const landCoords: Array<{ q: number; r: number; col: number; row: number }> = [];
+  const moistureMap = new Map<string, number>();
+  const latMap = new Map<string, number>();
 
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
       const { q, r } = offsetToAxial(col, row);
       const key = tileKey(q, r);
 
-      // Compute height field
+      // Compute smooth height field
       let elev = 0;
       for (const b of blobs) {
         const dx = col - b.x;
         const dy = row - b.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < b.radius * 1.8) {
+        if (dist < b.radius * 1.85) {
           elev += b.weight * Math.exp(-(dist * dist) / (2 * b.radius * b.radius));
+        }
+      }
+
+      // Add coherent tectonic ridge elevation so hills & mountains form connected chains
+      for (const rg of ridgeSeeds) {
+        const dx = col - rg.x;
+        const dy = row - rg.y;
+        const along = dx * rg.cosA + dy * rg.sinA;
+        const perp = -dx * rg.sinA + dy * rg.cosA;
+        if (Math.abs(along) < rg.len * 1.4 && Math.abs(perp) < rg.width * 2.5) {
+          const alongFall = Math.exp(-(along * along) / (2 * rg.len * rg.len));
+          const perpFall = Math.exp(-(perp * perp) / (2 * rg.width * rg.width));
+          elev += rg.strength * alongFall * perpFall;
         }
       }
 
@@ -167,12 +222,12 @@ export function generateWorld(config: GameConfig): GameState {
       const centerDist = Math.sqrt(nx * nx + ny * ny);
 
       if (config.mapType === 'pangaea') {
-        elev += Math.max(0, 0.75 - centerDist * 1.45);
+        elev += Math.max(0, 0.78 - centerDist * 1.42);
       } else if (config.mapType === 'inland_sea') {
         if (centerDist < 0.23) elev -= 0.85;
         else elev += 0.35;
       } else if (config.mapType === 'wild_frontier') {
-        elev += 0.25 + (rng() - 0.5) * 0.35;
+        elev += 0.26 + (rng() - 0.5) * 0.14;
       } else if (config.mapType === 'archipelago') {
         elev -= 0.12;
       }
@@ -185,11 +240,26 @@ export function generateWorld(config: GameConfig): GameState {
         elev *= 0.35 + 0.65 * edgeFactor;
       }
 
-      elev += (rng() - 0.5) * 0.22;
+      // Subtle micro-relief without breaking regional land coherence
+      elev += (rng() - 0.5) * 0.07;
 
-      // Latitude temperature
-      const lat = Math.abs(row / (height - 1) - 0.5) * 2; // 0 equator .. 1 poles
-      const moisture = rng();
+      // Smooth regional moisture field (0..1)
+      let moisture = 0.52;
+      for (const mb of moistureBlobs) {
+        const dx = col - mb.x;
+        const dy = row - mb.y;
+        const d2 = dx * dx + dy * dy;
+        moisture += mb.delta * Math.exp(-d2 / (2 * mb.radius * mb.radius));
+      }
+      moisture += (rng() - 0.5) * 0.06;
+      moisture = Math.max(0.02, Math.min(0.98, moisture));
+      moistureMap.set(key, moisture);
+
+      // Latitude climate zone (0 = equator at center, 1 = north/south poles) with gentle organic contour
+      const baseLat = Math.abs(row / Math.max(1, height - 1) - 0.5) * 2;
+      const latWave = Math.sin((col / width) * Math.PI * lonFreq + latPhase) * 0.04;
+      const effLat = Math.max(0, Math.min(1, baseLat + latWave));
+      latMap.set(key, effLat);
 
       let biome: BiomeType = 'ocean';
       let temperature: TemperatureZone = 'ocean';
@@ -197,28 +267,85 @@ export function generateWorld(config: GameConfig): GameState {
       if (elev < 0.46) {
         biome = 'ocean';
         temperature = 'ocean';
-      } else if (elev < 0.58) {
+      } else if (elev < 0.57) {
         biome = 'coast';
         temperature = 'ocean';
       } else {
-        if (lat > 0.78) {
+        // Strict latitude-respecting climate zones with large regional moisture basins:
+        // 1. Polar / Arctic Zone (High latitudes near top & bottom poles)
+        if (effLat >= 0.75) {
           temperature = 'arctic';
-          biome = elev > 1.18 ? 'mountain' : 'tundra';
-        } else if (lat < 0.28) {
-          if (moisture < 0.38) {
+          if (elev > 1.24) {
+            biome = 'mountain';
+          } else if (elev > 0.96) {
+            biome = 'hills';
+          } else if (effLat < 0.84 && moisture > 0.55) {
+            biome = 'forest'; // Sub-arctic snowy taiga forest belt
+          } else {
+            biome = 'tundra';
+          }
+        }
+        // 2. Temperate Zone (Mid-latitudes: sweeping forests, grasslands, and rolling green hills)
+        else if (effLat >= 0.38) {
+          temperature = 'temperate';
+          if (elev > 1.24) {
+            biome = 'mountain';
+          } else if (elev > 0.93) {
+            biome = 'hills';
+          } else if (moisture >= 0.51) {
+            biome = 'forest';
+          } else {
+            biome = 'plains';
+          }
+        }
+        // 3. Subtropical / Horse-Latitude Belt (Large contiguous deserts, arid mesas, or savanna/grass hills)
+        else if (effLat >= 0.17) {
+          if (moisture < 0.47) {
             temperature = 'arid';
-            biome = elev > 1.22 ? 'mountain' : 'desert';
+            if (elev > 1.25) {
+              biome = 'mountain';
+            } else if (elev > 0.95) {
+              biome = 'hills';
+            } else {
+              biome = 'desert';
+            }
+          } else if (moisture < 0.62) {
+            // Smooth transition belt (grassland / grassy hills connecting desert to temperate/tropical)
+            temperature = effLat >= 0.26 ? 'temperate' : 'arid';
+            if (elev > 1.24) {
+              biome = 'mountain';
+            } else if (elev > 0.91) {
+              biome = 'hills';
+            } else {
+              biome = 'plains';
+            }
+          } else {
+            temperature = effLat < 0.25 ? 'tropical' : 'temperate';
+            if (elev > 1.24) {
+              biome = 'mountain';
+            } else if (elev > 0.94) {
+              biome = 'hills';
+            } else {
+              biome = 'forest';
+            }
+          }
+        }
+        // 4. Equatorial / Tropical Zone (Lush rainforests, tropical highlands, or dry equatorial basins)
+        else {
+          if (moisture < 0.30) {
+            temperature = 'arid';
+            biome = elev > 1.24 ? 'mountain' : elev > 0.95 ? 'hills' : 'desert';
           } else {
             temperature = 'tropical';
-            biome = elev > 1.2 ? 'mountain' : elev > 0.96 ? 'hills' : moisture > 0.55 ? 'forest' : 'plains';
-          }
-        } else {
-          if (moisture < 0.22) {
-            temperature = 'arid';
-            biome = elev > 1.22 ? 'mountain' : 'desert';
-          } else {
-            temperature = 'temperate';
-            biome = elev > 1.2 ? 'mountain' : elev > 0.95 ? 'hills' : moisture > 0.56 ? 'forest' : 'plains';
+            if (elev > 1.24) {
+              biome = 'mountain';
+            } else if (elev > 0.94) {
+              biome = 'hills';
+            } else if (moisture >= 0.46) {
+              biome = 'forest';
+            } else {
+              biome = 'plains';
+            }
           }
         }
       }
@@ -260,6 +387,239 @@ export function generateWorld(config: GameConfig): GameState {
     }
   }
 
+  // Regional Biome Clustering & Climate Transition Smoothing (2 cellular-automata passes)
+  // Consolidates scattered single tiles into large forests, expansive deserts, broad grasslands,
+  // and ensures smooth foothills/transitions between desert and grass hills.
+  for (let pass = 0; pass < 2; pass++) {
+    const updates: Array<{ key: string; biome: BiomeType; temperature: TemperatureZone }> = [];
+    for (const c of landCoords) {
+      const k = tileKey(c.q, c.r);
+      const tile = tiles[k];
+      if (!tile || tile.biome === 'ocean' || tile.biome === 'coast' || tile.biome === 'mountain') {
+        continue;
+      }
+      const effLat = latMap.get(k) ?? 0.5;
+      const landNeighbors = hexNeighbors(tile.q, tile.r)
+        .map((n) => tiles[tileKey(n.q, n.r)])
+        .filter(
+          (nt): nt is HexTile =>
+            Boolean(nt && nt.biome !== 'ocean' && nt.biome !== 'coast' && nt.biome !== 'mountain')
+        );
+
+      if (landNeighbors.length < 2) continue;
+
+      const sameBiomeCount = landNeighbors.filter((nt) => nt.biome === tile.biome).length;
+      if (sameBiomeCount <= 1) {
+        const counts = new Map<BiomeType, { count: number; temp: TemperatureZone }>();
+        for (const nt of landNeighbors) {
+          // Respect climate latitude constraints when clustering
+          if (nt.biome === 'tundra' && effLat < 0.68) continue;
+          if (nt.biome === 'desert' && effLat > 0.44) continue;
+          const prev = counts.get(nt.biome);
+          counts.set(nt.biome, {
+            count: (prev?.count ?? 0) + 1,
+            temp: nt.temperature,
+          });
+        }
+        let bestBiome: BiomeType | null = null;
+        let bestTemp: TemperatureZone = tile.temperature;
+        let bestCount = 0;
+        for (const [bType, info] of counts.entries()) {
+          if (info.count > bestCount) {
+            bestCount = info.count;
+            bestBiome = bType;
+            bestTemp = info.temp;
+          }
+        }
+        if (bestBiome && bestCount >= 3) {
+          updates.push({ key: k, biome: bestBiome, temperature: bestTemp });
+        }
+      }
+    }
+    for (const u of updates) {
+      tiles[u.key].biome = u.biome;
+      tiles[u.key].temperature = u.temperature;
+    }
+  }
+
+  // Foothill & Ecotone Pass:
+  // 1) Mountain ranges naturally step down through hills before flat plains/desert.
+  // 2) Where arid desert meets temperate forest, place a natural grass-hills / steppe transition buffer.
+  for (const c of landCoords) {
+    const k = tileKey(c.q, c.r);
+    const tile = tiles[k];
+    if (!tile || tile.biome === 'ocean' || tile.biome === 'coast' || tile.biome === 'mountain') {
+      continue;
+    }
+    const nTiles = hexNeighbors(tile.q, tile.r)
+      .map((n) => tiles[tileKey(n.q, n.r)])
+      .filter((nt): nt is HexTile => Boolean(nt));
+
+    const mtnCount = nTiles.filter((nt) => nt.biome === 'mountain').length;
+    if (mtnCount >= 2 && (tile.biome === 'plains' || tile.biome === 'desert')) {
+      tile.biome = 'hills';
+    }
+
+    // Smooth transition between desert and dense temperate forest -> grassy hills or savanna plains
+    if (tile.biome === 'desert') {
+      const hasTemperateForest = nTiles.some(
+        (nt) => nt.biome === 'forest' && nt.temperature === 'temperate'
+      );
+      const hasGrassHills = nTiles.some(
+        (nt) => nt.biome === 'hills' && nt.temperature === 'temperate'
+      );
+      if (hasTemperateForest && !hasGrassHills) {
+        tile.biome = 'hills';
+        tile.temperature = 'temperate';
+      }
+    }
+  }
+
+  // Stamp Pre-Made Multi-Tile Landscape Clusters:
+  // A) Sovereign Mountain Massifs (High Sovereign Peak + Smaller Companion Mountains + Ring of Foothills)
+  const massifTarget = config.mapSize === 'large' ? 6 : config.mapSize === 'medium' ? 4 : 3;
+  const uplandCandidates = Object.values(tiles).filter(
+    (t) =>
+      (t.biome === 'mountain' || (t.biome === 'hills' && t.elevation > 0.72)) &&
+      hexNeighbors(t.q, t.r).every((n) => {
+        const nt = tiles[tileKey(n.q, n.r)];
+        return nt && nt.biome !== 'ocean' && nt.biome !== 'coast';
+      })
+  );
+  const massifCenters: HexTile[] = [];
+  for (let tries = 0; tries < 80 && massifCenters.length < massifTarget; tries++) {
+    const cand = uplandCandidates[Math.floor(rng() * uplandCandidates.length)];
+    if (!cand) break;
+    if (massifCenters.some((m) => hexDistance(m.q, m.r, cand.q, cand.r) < 6)) continue;
+    massifCenters.push(cand);
+
+    cand.biome = 'mountain';
+    cand.elevation = 0.98;
+    cand.feature = 'none';
+    cand.clusterType = 'mountain_massif';
+    cand.clusterRole = 'center';
+
+    const ring1 = hexNeighbors(cand.q, cand.r)
+      .map((n) => tiles[tileKey(n.q, n.r)])
+      .filter(
+        (nt): nt is HexTile => Boolean(nt && nt.biome !== 'ocean' && nt.biome !== 'coast')
+      );
+
+    // 2 adjacent tiles become smaller companion mountains; remaining ring-1 become foothills
+    const subPeakCount = Math.min(2, Math.max(1, Math.floor(ring1.length * 0.35)));
+    ring1.forEach((nt, idx) => {
+      if (idx < subPeakCount) {
+        nt.biome = 'mountain';
+        nt.elevation = 0.84;
+        nt.feature = 'none';
+        nt.clusterType = 'mountain_massif';
+        nt.clusterRole = 'inner_ring';
+      } else {
+        nt.biome = 'hills';
+        nt.elevation = Math.max(nt.elevation, 0.68);
+        nt.clusterType = 'mountain_massif';
+        nt.clusterRole = 'outer_ring';
+      }
+    });
+
+    // Ensure outer foothills wrap around the companion mountains too
+    for (const sub of ring1.slice(0, subPeakCount)) {
+      for (const n2 of hexNeighbors(sub.q, sub.r)) {
+        const nt2 = tiles[tileKey(n2.q, n2.r)];
+        if (
+          nt2 &&
+          nt2.biome !== 'ocean' &&
+          nt2.biome !== 'coast' &&
+          nt2.biome !== 'mountain' &&
+          !nt2.clusterType
+        ) {
+          nt2.biome = 'hills';
+          nt2.clusterType = 'mountain_massif';
+          nt2.clusterRole = 'outer_ring';
+        }
+      }
+    }
+  }
+
+  // Also organize any natural mountain tiles into coherent peak -> sub-peak -> foothill clusters
+  for (const tile of Object.values(tiles)) {
+    if (tile.biome !== 'mountain') continue;
+    const nTiles = hexNeighbors(tile.q, tile.r)
+      .map((n) => tiles[tileKey(n.q, n.r)])
+      .filter((nt): nt is HexTile => Boolean(nt));
+
+    if (!tile.clusterType) {
+      const hasHigherMtnNeighbor = nTiles.some(
+        (nt) => nt.biome === 'mountain' && (nt.clusterRole === 'center' || nt.elevation > tile.elevation)
+      );
+      tile.clusterType = 'mountain_massif';
+      tile.clusterRole = hasHigherMtnNeighbor ? 'inner_ring' : 'center';
+    }
+
+    for (const nt of nTiles) {
+      if (nt.biome === 'plains' || nt.biome === 'desert' || nt.biome === 'tundra') {
+        nt.biome = 'hills';
+        if (!nt.clusterType) {
+          nt.clusterType = 'mountain_massif';
+          nt.clusterRole = 'outer_ring';
+        }
+      } else if (nt.biome === 'hills' && !nt.clusterType) {
+        nt.clusterType = 'mountain_massif';
+        nt.clusterRole = 'outer_ring';
+      }
+    }
+  }
+
+  // B) Stamp Multi-Tile Desert Oasis Clusters (7-hex pattern: Oasis Heart surrounded by 6 Desert Dune tiles)
+  const oasisTarget = config.mapSize === 'large' ? 4 : config.mapSize === 'medium' ? 3 : 2;
+  const desertInteriorCandidates = Object.values(tiles).filter((t) => {
+    if (t.biome !== 'desert' || t.clusterType) return false;
+    const nTiles = hexNeighbors(t.q, t.r)
+      .map((n) => tiles[tileKey(n.q, n.r)])
+      .filter((nt): nt is HexTile => Boolean(nt));
+    if (nTiles.length < 6) return false;
+    const aridNeighbors = nTiles.filter(
+      (nt) => nt.biome === 'desert' || (nt.biome === 'hills' && nt.temperature === 'arid')
+    );
+    return aridNeighbors.length >= 5;
+  });
+
+  const oasisCenters: HexTile[] = [];
+  for (let tries = 0; tries < 70 && oasisCenters.length < oasisTarget; tries++) {
+    const cand = desertInteriorCandidates[Math.floor(rng() * desertInteriorCandidates.length)];
+    if (!cand) break;
+    if (oasisCenters.some((o) => hexDistance(o.q, o.r, cand.q, cand.r) < 6)) continue;
+    oasisCenters.push(cand);
+
+    cand.biome = 'desert';
+    cand.temperature = 'arid';
+    cand.hasRiver = true; // Oasis spring water (+1 Food, +1 Gold)
+    cand.clusterType = 'oasis';
+    cand.clusterRole = 'center';
+
+    for (const n of hexNeighbors(cand.q, cand.r)) {
+      const nt = tiles[tileKey(n.q, n.r)];
+      if (nt && nt.biome !== 'ocean' && nt.biome !== 'coast' && nt.biome !== 'mountain') {
+        nt.biome = 'desert';
+        nt.temperature = 'arid';
+        nt.clusterType = 'oasis';
+        nt.clusterRole = 'inner_ring';
+      }
+    }
+  }
+
+  // EnsurelandCoords stays accurate after cluster stamping
+  landCoords.length = 0;
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      const { q, r } = offsetToAxial(col, row);
+      const t = tiles[tileKey(q, r)];
+      if (t && t.biome !== 'ocean' && t.biome !== 'coast' && t.biome !== 'mountain') {
+        landCoords.push({ q, r, col, row });
+      }
+    }
+  }
+
   // Smooth coastline: any ocean hex adjacent to land becomes coast
   for (const tile of Object.values(tiles)) {
     if (tile.biome === 'ocean') {
@@ -275,6 +635,9 @@ export function generateWorld(config: GameConfig): GameState {
 
   // Generate winding downhill rivers from highlands/mountains to coast
   generateRivers(tiles, rng, config.mapSize);
+
+  // Generate multi-tile coastal clusters & diverse shoreline types (sandy beaches, rocky shores, high cliffs, coastal swamps, coral reefs, icy shores)
+  generateShorelinesAndCoastalClusters(tiles, height, rng, config.mapSize);
 
   // Place 2-4 Natural Wonders on scenic land tiles
   const wonderCount = config.mapSize === 'large' ? 4 : config.mapSize === 'medium' ? 3 : 2;
@@ -763,6 +1126,163 @@ function generateRivers(
 
     if (reachedSea || steps >= 4) {
       created++;
+    }
+  }
+}
+
+function generateShorelinesAndCoastalClusters(
+  tiles: Record<string, HexTile>,
+  height: number,
+  rng: () => number,
+  mapSize: GameConfig['mapSize']
+) {
+  const coastTiles = Object.values(tiles).filter((t) => t.biome === 'coast');
+
+  // 1. Stamp Multi-Tile Coral Reef Lagoon & Atoll Clusters in warm coastal waters
+  const warmCoastCandidates = coastTiles.filter((t) => {
+    const lat = Math.abs(t.r / Math.max(1, height - 1) - 0.5) * 2;
+    return lat < 0.38;
+  });
+  const coralClusterTarget = mapSize === 'large' ? 4 : mapSize === 'medium' ? 3 : 2;
+  const coralCenters: HexTile[] = [];
+
+  for (let tries = 0; tries < 60 && coralCenters.length < coralClusterTarget; tries++) {
+    const cand = warmCoastCandidates[Math.floor(rng() * warmCoastCandidates.length)];
+    if (!cand) break;
+    if (coralCenters.some((c) => hexDistance(c.q, c.r, cand.q, cand.r) < 5)) continue;
+    coralCenters.push(cand);
+
+    cand.shoreline = 'coral_reef';
+    cand.clusterType = 'coral_lagoon';
+    cand.clusterRole = 'center';
+
+    for (const n of hexNeighbors(cand.q, cand.r)) {
+      const nt = tiles[tileKey(n.q, n.r)];
+      if (!nt) continue;
+      if (nt.biome === 'coast') {
+        nt.shoreline = 'coral_reef';
+        nt.clusterType = 'coral_lagoon';
+        nt.clusterRole = 'inner_ring';
+      } else if (nt.biome === 'plains' || nt.biome === 'desert') {
+        nt.shoreline = 'sandy_beach';
+      }
+    }
+  }
+
+  // 2. Stamp Multi-Tile River Delta & Coastal Mangrove Swamp Clusters
+  for (const ct of coastTiles) {
+    if (ct.clusterType) continue;
+    const lat = Math.abs(ct.r / Math.max(1, height - 1) - 0.5) * 2;
+    if (lat >= 0.72) continue;
+
+    const nTiles = hexNeighbors(ct.q, ct.r)
+      .map((n) => tiles[tileKey(n.q, n.r)])
+      .filter((nt): nt is HexTile => Boolean(nt));
+
+    const hasRiverMouth =
+      ct.riverEdges?.some(Boolean) ||
+      nTiles.some((nt) => nt.biome !== 'ocean' && nt.biome !== 'coast' && nt.hasRiver);
+
+    if (hasRiverMouth) {
+      ct.shoreline = 'coastal_swamp';
+      ct.clusterType = 'coastal_swamp_delta';
+      ct.clusterRole = 'center';
+
+      for (const nt of nTiles) {
+        if (nt.biome === 'coast' && !nt.clusterType) {
+          nt.shoreline = 'coastal_swamp';
+          nt.clusterType = 'coastal_swamp_delta';
+          nt.clusterRole = 'inner_ring';
+        } else if (nt.biome === 'plains' || nt.biome === 'forest') {
+          nt.shoreline = 'coastal_swamp';
+          if (!nt.clusterType) {
+            nt.clusterType = 'coastal_swamp_delta';
+            nt.clusterRole = 'outer_ring';
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Stamp Multi-Tile High Sea Cliff Headland Clusters & Arctic Icy Fjord Clusters,
+  // and classify all remaining coastal water & coastal land tiles!
+  for (const ct of coastTiles) {
+    const lat = Math.abs(ct.r / Math.max(1, height - 1) - 0.5) * 2;
+    const landNeighbors = hexNeighbors(ct.q, ct.r)
+      .map((n) => tiles[tileKey(n.q, n.r)])
+      .filter(
+        (nt): nt is HexTile => Boolean(nt && nt.biome !== 'ocean' && nt.biome !== 'coast')
+      );
+
+    if (lat >= 0.74 || landNeighbors.some((nt) => nt.temperature === 'arctic' || nt.biome === 'tundra')) {
+      ct.shoreline = 'icy_shore';
+      if (!ct.clusterType) {
+        ct.clusterType = 'icy_fjord';
+        ct.clusterRole = 'center';
+      }
+      for (const l of landNeighbors) {
+        if (!l.shoreline) l.shoreline = 'icy_shore';
+      }
+      continue;
+    }
+
+    if (ct.shoreline) continue;
+
+    const hasMtnOrHighHill = landNeighbors.some(
+      (nt) => nt.biome === 'mountain' || nt.biome === 'hills'
+    );
+    const hasForest = landNeighbors.some((nt) => nt.biome === 'forest');
+    const hasDesertOrPlains = landNeighbors.some(
+      (nt) => nt.biome === 'desert' || nt.biome === 'plains'
+    );
+
+    if (hasMtnOrHighHill) {
+      const isHighCliff =
+        landNeighbors.some((nt) => nt.biome === 'mountain' || nt.elevation > 0.64) ||
+        rng() < 0.58;
+      ct.shoreline = isHighCliff ? 'high_cliffs' : 'rocky_shore';
+      ct.clusterType = 'cliff_headland';
+      ct.clusterRole = isHighCliff ? 'center' : 'inner_ring';
+      for (const l of landNeighbors) {
+        if (l.biome === 'hills' || l.biome === 'mountain') {
+          l.shoreline = isHighCliff ? 'high_cliffs' : 'rocky_shore';
+        }
+      }
+    } else if (hasForest && lat < 0.34 && rng() < 0.48) {
+      ct.shoreline = 'coastal_swamp';
+      ct.clusterType = 'coastal_swamp_delta';
+      ct.clusterRole = 'inner_ring';
+      for (const l of landNeighbors) {
+        if (!l.shoreline) l.shoreline = 'coastal_swamp';
+      }
+    } else if (hasDesertOrPlains) {
+      if (lat < 0.32 && rng() < 0.28) {
+        ct.shoreline = 'coral_reef';
+      } else {
+        ct.shoreline = 'sandy_beach';
+      }
+      for (const l of landNeighbors) {
+        if (!l.shoreline) l.shoreline = 'sandy_beach';
+      }
+    } else {
+      ct.shoreline = rng() < 0.55 ? 'rocky_shore' : 'sandy_beach';
+      for (const l of landNeighbors) {
+        if (!l.shoreline) l.shoreline = ct.shoreline;
+      }
+    }
+  }
+
+  // 4. Smooth shoreline stretches along adjacent coast tiles so beaches, cliffs, swamps, and reefs form multi-tile bays
+  for (const ct of coastTiles) {
+    if (ct.clusterType) continue;
+    const coastNeighbors = hexNeighbors(ct.q, ct.r)
+      .map((n) => tiles[tileKey(n.q, n.r)])
+      .filter((nt): nt is HexTile => Boolean(nt && nt.biome === 'coast' && nt.shoreline));
+    if (coastNeighbors.length >= 2) {
+      const same = coastNeighbors.filter((nt) => nt.shoreline === ct.shoreline).length;
+      if (same === 0) {
+        ct.shoreline = coastNeighbors[0].shoreline;
+      }
     }
   }
 }

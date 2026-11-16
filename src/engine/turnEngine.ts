@@ -1,4 +1,5 @@
 import {
+  AGES,
   BUILDING_DEFS,
   CORE_KNOWLEDGE_NODES,
   INVENTIONS,
@@ -14,6 +15,7 @@ import {
   GameState,
   HexTile,
   ImprovementType,
+  NaturalDisasterKind,
   ToastNotice,
   UnitState,
 } from '../types/game';
@@ -21,10 +23,147 @@ import { hexDistance, hexInRange, hexNeighbors, parseTileKey, tileKey } from './
 import { getPacingResearchFactor, processCivResearchTurn } from './researchEngine';
 
 const SAVE_STORAGE_KEY = 'epoch_element_autosave_v1';
+const NAMED_SAVES_STORAGE_KEY = 'epoch_element_saved_slots_v1';
+
+export interface SavedGameSlot {
+  slotId: string;
+  title: string;
+  savedAt: string; // ISO 8601 datetime
+  turn: number;
+  civName: string;
+  leaderName: string;
+  ageName: string;
+  mapType: string;
+  mapSize: string;
+  citiesCount: number;
+  discoveriesCount: number;
+  isAutosave?: boolean;
+  state: GameState;
+}
+
+function buildSlotMetadata(
+  state: GameState,
+  title: string,
+  slotId: string,
+  savedAt: string,
+  isAutosave = false
+): SavedGameSlot {
+  const playerCiv = state.civs[state.playerCivId];
+  const ageDef = AGES[playerCiv?.ageIndex ?? 0];
+  const citiesCount = Object.values(state.cities).filter(
+    (c) => c.civId === state.playerCivId
+  ).length;
+  const discoveriesCount =
+    (playerCiv?.unlockedCore.length ?? 0) + (playerCiv?.unlockedInventions.length ?? 0);
+
+  return {
+    slotId,
+    title: title.trim() || `${playerCiv?.name || 'Empire'} Campaign`,
+    savedAt,
+    turn: state.turn,
+    civName: playerCiv?.name || 'Terran Vanguard',
+    leaderName: playerCiv?.leaderName || 'Commander',
+    ageName: ageDef?.name || 'Stone Age',
+    mapType: state.config.mapType,
+    mapSize: state.config.mapSize,
+    citiesCount,
+    discoveriesCount,
+    isAutosave,
+    state,
+  };
+}
+
+export function listSavedGames(): SavedGameSlot[] {
+  const slots: SavedGameSlot[] = [];
+  try {
+    const rawNamed = localStorage.getItem(NAMED_SAVES_STORAGE_KEY);
+    if (rawNamed) {
+      const parsed = JSON.parse(rawNamed) as SavedGameSlot[];
+      if (Array.isArray(parsed)) {
+        slots.push(...parsed);
+      }
+    }
+  } catch {
+    // Ignore malformed storage
+  }
+
+  try {
+    const rawAuto = localStorage.getItem(SAVE_STORAGE_KEY);
+    if (rawAuto) {
+      const parsedAuto = JSON.parse(rawAuto) as GameState | SavedGameSlot;
+      if (parsedAuto && 'slotId' in parsedAuto && parsedAuto.state) {
+        slots.push({ ...parsedAuto, isAutosave: true });
+      } else if (parsedAuto && 'turn' in parsedAuto && 'tiles' in parsedAuto) {
+        slots.push(
+          buildSlotMetadata(
+            parsedAuto as GameState,
+            'Autosave (Latest Turn)',
+            'autosave_slot',
+            new Date().toISOString(),
+            true
+          )
+        );
+      }
+    }
+  } catch {
+    // Ignore malformed autosave
+  }
+
+  return slots.sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
+}
+
+export function saveNamedGame(
+  state: GameState,
+  title: string,
+  overwriteSlotId?: string
+): SavedGameSlot {
+  const nowIso = new Date().toISOString();
+  const slotId = overwriteSlotId || `save_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const newSlot = buildSlotMetadata(state, title, slotId, nowIso, false);
+
+  try {
+    const rawNamed = localStorage.getItem(NAMED_SAVES_STORAGE_KEY);
+    const existing: SavedGameSlot[] = rawNamed ? JSON.parse(rawNamed) : [];
+    const filtered = Array.isArray(existing)
+      ? existing.filter((s) => s.slotId !== slotId)
+      : [];
+    const nextList = [newSlot, ...filtered].slice(0, 25);
+    localStorage.setItem(NAMED_SAVES_STORAGE_KEY, JSON.stringify(nextList));
+  } catch {
+    // Ignore storage quota issues gracefully
+  }
+
+  return newSlot;
+}
+
+export function deleteSavedGame(slotId: string): SavedGameSlot[] {
+  try {
+    if (slotId === 'autosave_slot') {
+      localStorage.removeItem(SAVE_STORAGE_KEY);
+    } else {
+      const rawNamed = localStorage.getItem(NAMED_SAVES_STORAGE_KEY);
+      if (rawNamed) {
+        const existing: SavedGameSlot[] = JSON.parse(rawNamed);
+        const filtered = existing.filter((s) => s.slotId !== slotId);
+        localStorage.setItem(NAMED_SAVES_STORAGE_KEY, JSON.stringify(filtered));
+      }
+    }
+  } catch {
+    // Ignore
+  }
+  return listSavedGames();
+}
 
 export function saveGameToLocalStorage(state: GameState) {
   try {
-    localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(state));
+    const autoSlot = buildSlotMetadata(
+      state,
+      'Autosave (Latest Turn)',
+      'autosave_slot',
+      new Date().toISOString(),
+      true
+    );
+    localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(autoSlot));
   } catch {
     // Ignore storage quota issues gracefully
   }
@@ -34,7 +173,11 @@ export function loadGameFromLocalStorage(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as GameState;
+    const parsed = JSON.parse(raw) as GameState | SavedGameSlot;
+    if (parsed && 'slotId' in parsed && parsed.state) {
+      return parsed.state;
+    }
+    return parsed as GameState;
   } catch {
     return null;
   }
@@ -286,6 +429,16 @@ export function getTileYields(tile: HexTile): {
     gold += 1;
   }
 
+  if (tile.shoreline === 'coral_reef') {
+    food += 1;
+    research += 1;
+  } else if (tile.shoreline === 'coastal_swamp') {
+    food += 1;
+    prod += 1;
+  } else if (tile.shoreline === 'high_cliffs' || tile.shoreline === 'rocky_shore') {
+    prod += 1;
+  }
+
   if (tile.feature === 'rare_flora') research += 1;
   if (tile.feature === 'geothermal_vent') {
     prod += 1;
@@ -342,8 +495,26 @@ export function getCityYields(state: GameState, city: CityState) {
   }
 
   const civ = state.civs[city.civId];
+  if (civ?.unlockedInventions.includes('tally_numbers') && city.isCapital) {
+    gold += 1;
+    research += 1;
+  }
+  if (civ?.unlockedInventions.includes('basic_arithmetic_geometry')) {
+    if (city.buildings.includes('market')) gold += 2;
+    if (city.producing?.type === 'building') prod = Math.round(prod * 1.1);
+  }
+  if (civ?.unlockedInventions.includes('calculus_complex_math')) {
+    research = Math.round(research * 1.2);
+  }
   if (civ?.unlockedInventions.includes('steam_engine')) {
     prod = Math.round(prod * 1.15);
+  }
+  if (civ?.unlockedInventions.includes('vulcanized_rubber_plastics')) {
+    gold = Math.round(gold * 1.15);
+    prod = Math.round(prod * 1.15);
+  }
+  if (civ?.unlockedInventions.includes('antibiotics_virology_therapy')) {
+    food = Math.round(food * 1.25);
   }
 
   const foodConsumed = city.population * 2;
@@ -442,7 +613,7 @@ export function moveUnitTo(state: GameState, unitId: string, targetQ: number, ta
 
   updateVisibility(state);
 
-  // Trigger exploration event if stepping onto ancient ruins or unsurveyed special feature as player
+  // Trigger exploration event or automatic specimen survey popup when encountering an unsurveyed feature
   const tile = state.tiles[tileKey(targetQ, targetR)];
   const def = UNIT_DEFS[unit.defId];
   if (
@@ -450,12 +621,14 @@ export function moveUnitTo(state: GameState, unitId: string, targetQ: number, ta
     unit.civId === state.playerCivId &&
     !state.activeEvent &&
     tile.feature !== 'none' &&
+    tile.feature !== 'natural_wonder' &&
     !tile.featureSurveyed &&
     (def.role === 'scout' || def.role === 'explorer')
   ) {
-    // Auto-hint or event chance on ruins
     if (tile.feature === 'ancient_ruins') {
       triggerExplorationEvent(state, tile, unit);
+    } else {
+      performTileFeatureSurvey(state, unit, tile, false);
     }
   }
 
@@ -487,21 +660,70 @@ export function moveUnitTo(state: GameState, unitId: string, targetQ: number, ta
   return { ...state };
 }
 
-export function surveyTileFeature(state: GameState, unitId: string): GameState {
-  const unit = state.units[unitId];
-  if (!unit || unit.movesLeft <= 0) return state;
-  const tile = state.tiles[tileKey(unit.q, unit.r)];
-  if (!tile || tile.feature === 'none' || tile.featureSurveyed) return state;
+const FEATURE_PRIMARY_CORE_ORDER: Partial<Record<HexTile['feature'], string[]>> = {
+  copper: ['copper_smelting', 'gold_silver_refining', 'tin_alloying', 'zinc_brass_metallurgy', 'stone_knapping'],
+  iron: ['iron_metallurgy', 'steel_carbonizing', 'aluminum_light_alloys', 'magnetism'],
+  coal: ['coal_charcoal', 'iron_metallurgy', 'steam_thermodynamics', 'synthetic_plastics'],
+  rare_flora: [
+    'botany_domestication',
+    'fermentation_medicine',
+    'cellular_anatomy',
+    'latex_natural_rubber',
+    'bacteriology',
+    'virology_immunology',
+    'anatomy_germ_theory',
+    'basic_chemistry',
+  ],
+  fossils: [
+    'stone_knapping',
+    'clay_ceramics',
+    'evolution_paleontology',
+    'petrochemicals',
+    'synthetic_plastics',
+  ],
+  geothermal_vent: ['fire_control', 'basic_chemistry', 'steam_thermodynamics'],
+  ancient_ruins: [
+    'solar_calendar',
+    'planetary_kinematics',
+    'heliocentric_solar_system',
+    'lever_pulley',
+    'wheel_axle',
+    'optics_lenses',
+  ],
+};
 
+function performTileFeatureSurvey(
+  state: GameState,
+  unit: UnitState,
+  tile: HexTile,
+  consumeRemainingMoves: boolean
+) {
   const civ = state.civs[unit.civId];
   const { surveyBonus } = getUnitEffectiveStats(unit, tile);
   tile.featureSurveyed = true;
-  unit.movesLeft = 0;
-  unit.hasActed = true;
+  if (consumeRemainingMoves) {
+    unit.movesLeft = 0;
+    unit.hasActed = true;
+  }
 
-  awardUnitXp(unit, 15);
+  const xpGained = 15;
+  awardUnitXp(unit, xpGained);
 
-  // Find eligible Core Knowledge nodes boosted by this feature, or boost active focus
+  // 1) Prefer thematic Core Knowledge node directly tied to this mineral/specimen
+  const preferredIds = FEATURE_PRIMARY_CORE_ORDER[tile.feature] ?? [];
+  const preferredEligible = preferredIds
+    .map((id) => CORE_KNOWLEDGE_NODES.find((n) => n.id === id))
+    .find(
+      (n) =>
+        n &&
+        !civ.unlockedCore.includes(n.id) &&
+        n.dependencies.every((d) => civ.unlockedCore.includes(d))
+    );
+  const preferredAny = preferredIds
+    .map((id) => CORE_KNOWLEDGE_NODES.find((n) => n.id === id))
+    .find((n) => n && !civ.unlockedCore.includes(n.id));
+
+  // 2) Fallback to eligible node boosted by this feature or in active focus domain
   const matchingCore = CORE_KNOWLEDGE_NODES.filter(
     (n) =>
       !civ.unlockedCore.includes(n.id) &&
@@ -510,6 +732,8 @@ export function surveyTileFeature(state: GameState, unitId: string): GameState {
   );
 
   const targetNode =
+    preferredEligible ??
+    preferredAny ??
     matchingCore[0] ??
     CORE_KNOWLEDGE_NODES.find(
       (n) =>
@@ -525,11 +749,34 @@ export function surveyTileFeature(state: GameState, unitId: string): GameState {
 
   const sparkPct = Math.round(48 * surveyBonus);
   if (targetNode) {
-    civ.coreProgress[targetNode.id] = (civ.coreProgress[targetNode.id] ?? 0) + sparkPct;
-    if (civ.coreProgress[targetNode.id] >= 100) {
-      civ.coreProgress[targetNode.id] = 100;
+    const progressBefore = Math.min(100, Math.round(civ.coreProgress[targetNode.id] ?? 0));
+    const progressAfter = Math.min(100, progressBefore + sparkPct);
+    const isFullDiscovery = progressAfter >= 100;
+
+    civ.coreProgress[targetNode.id] = progressAfter;
+    if (isFullDiscovery && !civ.unlockedCore.includes(targetNode.id)) {
       civ.unlockedCore.push(targetNode.id);
-      if (civ.isHuman) {
+    }
+
+    if (civ.isHuman) {
+      state.activeSurveyPopup = {
+        id: `survey_popup_${state.turn}_${tile.q}_${tile.r}`,
+        turn: state.turn,
+        q: tile.q,
+        r: tile.r,
+        feature: tile.feature,
+        unitName: UNIT_DEFS[unit.defId]?.name || 'Explorer',
+        coreNodeId: targetNode.id,
+        coreNodeName: targetNode.name,
+        domain: targetNode.domain,
+        progressBefore,
+        progressAfter,
+        sparkAdded: progressAfter - progressBefore,
+        isFullDiscovery,
+        xpGained,
+      };
+
+      if (isFullDiscovery) {
         state.notices.unshift({
           id: `survey_core_${targetNode.id}_${state.turn}`,
           turn: state.turn,
@@ -539,22 +786,30 @@ export function surveyTileFeature(state: GameState, unitId: string): GameState {
           q: tile.q,
           r: tile.r,
         });
+      } else {
+        state.notices.unshift({
+          id: `survey_${state.turn}_${tile.q}`,
+          turn: state.turn,
+          title: `Specimen Cataloged (${tile.feature.replace('_', ' ')})`,
+          detail: `+${progressAfter - progressBefore}% puzzle piece toward ${targetNode.name} (${progressAfter}%).`,
+          kind: 'event',
+          q: tile.q,
+          r: tile.r,
+        });
       }
-    } else if (civ.isHuman) {
-      state.notices.unshift({
-        id: `survey_${state.turn}_${tile.q}`,
-        turn: state.turn,
-        title: `Specimen Cataloged (${tile.feature.replace('_', ' ')})`,
-        detail: `+${sparkPct}% progress toward ${targetNode.name} and +15 Unit XP.`,
-        kind: 'event',
-        q: tile.q,
-        r: tile.r,
-      });
     }
   } else {
     civ.researchPoints += 15;
   }
+}
 
+export function surveyTileFeature(state: GameState, unitId: string): GameState {
+  const unit = state.units[unitId];
+  if (!unit || unit.movesLeft <= 0) return state;
+  const tile = state.tiles[tileKey(unit.q, unit.r)];
+  if (!tile || tile.feature === 'none' || tile.featureSurveyed) return state;
+
+  performTileFeatureSurvey(state, unit, tile, true);
   return { ...state };
 }
 
@@ -648,11 +903,31 @@ export function resolveExplorationEventChoice(state: GameState, choiceIdx: numbe
           n.dependencies.every((d) => civ.unlockedCore.includes(d))
       );
     if (node) {
-      civ.coreProgress[node.id] = (civ.coreProgress[node.id] ?? 0) + 65;
-      if (civ.coreProgress[node.id] >= 100) {
-        civ.coreProgress[node.id] = 100;
+      const progressBefore = Math.min(100, Math.round(civ.coreProgress[node.id] ?? 0));
+      const progressAfter = Math.min(100, progressBefore + 65);
+      const isFullDiscovery = progressAfter >= 100;
+      civ.coreProgress[node.id] = progressAfter;
+      if (isFullDiscovery && !civ.unlockedCore.includes(node.id)) {
         civ.unlockedCore.push(node.id);
       }
+      const tile = state.tiles[tileKey(evt.q, evt.r)];
+      const unit = evt.unitId ? state.units[evt.unitId] : undefined;
+      state.activeSurveyPopup = {
+        id: `evt_survey_${state.turn}_${evt.q}_${evt.r}`,
+        turn: state.turn,
+        q: evt.q,
+        r: evt.r,
+        feature: tile?.feature && tile.feature !== 'none' ? tile.feature : 'ancient_ruins',
+        unitName: unit ? UNIT_DEFS[unit.defId]?.name || 'Explorer' : 'Expedition Scholars',
+        coreNodeId: node.id,
+        coreNodeName: node.name,
+        domain: node.domain,
+        progressBefore,
+        progressAfter,
+        sparkAdded: progressAfter - progressBefore,
+        isFullDiscovery,
+        xpGained: effect.xp ?? 15,
+      };
     }
   }
 
@@ -1195,6 +1470,7 @@ export function getAvailableBuildingsForCity(civ: CivState, city: CityState): st
 
 export function endTurn(state: GameState): GameState {
   state.recentCombats = [];
+  state.recentDisasters = [];
   const pacingProd = getPacingResearchFactor(state.config.pacing);
 
   // 1. Process all active Civilizations (Cities, Economy, Workers, Healing, Research)
@@ -1369,6 +1645,9 @@ export function endTurn(state: GameState): GameState {
       let heal = unit.fortified ? 12 : 6;
       if (unit.promotions.includes('field_medic')) heal += 8;
       if (sanitationActive(unit.civId)) heal += 5;
+      if (state.civs[unit.civId]?.unlockedInventions.includes('antibiotics_virology_therapy')) {
+        heal += 8;
+      }
       unit.hp = Math.min(unit.maxHp, unit.hp + heal);
     }
 
@@ -1380,12 +1659,323 @@ export function endTurn(state: GameState): GameState {
   runBarbarianTurn(state);
 
   state.turn += 1;
-  state.notices = state.notices.slice(0, 24);
   updateVisibility(state);
+  processRandomNaturalEvents(state);
+  state.notices = state.notices.slice(0, 24);
   checkConquestVictory(state);
   saveGameToLocalStorage(state);
 
   return { ...state };
+}
+
+function processRandomNaturalEvents(state: GameState) {
+  if (state.activeEvent) return;
+  const playerCiv = state.civs[state.playerCivId];
+  if (!playerCiv || playerCiv.isEliminated) return;
+
+  if (!state.naturalEventsByAge) state.naturalEventsByAge = {};
+  if (!state.recentDisasters) state.recentDisasters = [];
+
+  const currentAgeIdx = playerCiv.ageIndex;
+  const eventsThisAge = state.naturalEventsByAge[currentAgeIdx] ?? 0;
+
+  // Very rare: capped at 1 or 2 natural events per Age
+  if (eventsThisAge >= 2) return;
+
+  const lastEventTurn = state.lastNaturalEventTurn ?? -10;
+  const turnsSinceLast = state.turn - lastEventTurn;
+  if (state.turn < 3 || turnsSinceLast < 6) return;
+
+  const rollChance =
+    eventsThisAge === 0 ? (turnsSinceLast >= 11 ? 0.25 : 0.14) : 0.075;
+  if (Math.random() > rollChance) return;
+
+  // Gather player's cities & units that can observe phenomena within 3 hexes
+  const playerCities = Object.values(state.cities).filter((c) => c.civId === playerCiv.id);
+  const playerUnits = Object.values(state.units).filter((u) => u.civId === playerCiv.id);
+  if (playerCities.length === 0 && playerUnits.length === 0) return;
+
+  const findClosestObserver = (q: number, r: number): {
+    label: string;
+    unitId?: string;
+    dist: number;
+  } | null => {
+    let bestDist = Infinity;
+    let bestLabel = '';
+    let bestUnitId: string | undefined;
+
+    for (const u of playerUnits) {
+      const d = hexDistance(u.q, u.r, q, r);
+      if (d <= 3 && d < bestDist) {
+        bestDist = d;
+        bestUnitId = u.id;
+        bestLabel = `Observed by ${UNIT_DEFS[u.defId]?.name || 'Unit'} (${d === 0 ? 'at epicenter' : `${d} hex${d > 1 ? 'es' : ''} away`})`;
+      }
+    }
+    for (const c of playerCities) {
+      const d = hexDistance(c.q, c.r, q, r);
+      if (d <= 3 && d < bestDist) {
+        bestDist = d;
+        bestUnitId = undefined;
+        bestLabel = `Observed from ${c.name} (${d === 0 ? 'direct hit' : `${d} hex${d > 1 ? 'es' : ''} away`})`;
+      }
+    }
+    return bestDist <= 3 ? { label: bestLabel, unitId: bestUnitId, dist: bestDist } : null;
+  };
+
+  const observedTiles = Object.values(state.tiles).filter((t) => {
+    if (t.biome === 'ocean') return false;
+    return findClosestObserver(t.q, t.r) !== null;
+  });
+  if (observedTiles.length === 0) return;
+
+  const cityCoordSet = new Set(Object.values(state.cities).map((c) => tileKey(c.q, c.r)));
+
+  const shoreCandidates = observedTiles.filter((t) => {
+    if (t.biome === 'coast') {
+      return hexNeighbors(t.q, t.r).some((n) => {
+        const nt = state.tiles[tileKey(n.q, n.r)];
+        return nt && nt.biome !== 'ocean' && nt.biome !== 'coast';
+      });
+    }
+    return (
+      t.biome !== 'mountain' &&
+      hexNeighbors(t.q, t.r).some((n) => {
+        const nt = state.tiles[tileKey(n.q, n.r)];
+        return nt && (nt.biome === 'coast' || nt.biome === 'ocean');
+      })
+    );
+  });
+
+  const volcanoCandidates = observedTiles.filter(
+    (t) => (t.biome === 'mountain' || t.biome === 'hills') && !cityCoordSet.has(tileKey(t.q, t.r))
+  );
+
+  const floodCandidates = observedTiles.filter(
+    (t) =>
+      t.biome !== 'coast' &&
+      t.biome !== 'mountain' &&
+      (t.hasRiver ||
+        hexNeighbors(t.q, t.r).some((n) => state.tiles[tileKey(n.q, n.r)]?.hasRiver))
+  );
+
+  const meteorCandidates = observedTiles.filter(
+    (t) => t.biome !== 'coast' && !cityCoordSet.has(tileKey(t.q, t.r))
+  );
+
+  const pools: Array<{ kind: NaturalDisasterKind; list: HexTile[] }> = [];
+  if (shoreCandidates.length > 0) pools.push({ kind: 'shore_anomaly', list: shoreCandidates });
+  if (volcanoCandidates.length > 0) pools.push({ kind: 'volcano_eruption', list: volcanoCandidates });
+  if (floodCandidates.length > 0) pools.push({ kind: 'river_flood', list: floodCandidates });
+  if (meteorCandidates.length > 0) pools.push({ kind: 'meteor_strike', list: meteorCandidates });
+
+  if (pools.length === 0) return;
+
+  const chosenPool = pools[Math.floor(Math.random() * pools.length)];
+  const kind = chosenPool.kind;
+  const targetTile = chosenPool.list[Math.floor(Math.random() * chosenPool.list.length)];
+  const observer = findClosestObserver(targetTile.q, targetTile.r);
+  if (!observer) return;
+
+  // Check if any AI civilization also has a city or unit within 3 hexes and grant them science
+  for (const civ of Object.values(state.civs)) {
+    if (civ.isHuman || civ.isEliminated) continue;
+    const aiObserves =
+      Object.values(state.cities).some(
+        (c) => c.civId === civ.id && hexDistance(c.q, c.r, targetTile.q, targetTile.r) <= 3
+      ) ||
+      Object.values(state.units).some(
+        (u) => u.civId === civ.id && hexDistance(u.q, u.r, targetTile.q, targetTile.r) <= 3
+      );
+    if (aiObserves) {
+      civ.researchPoints += 18;
+    }
+  }
+
+  // Rare collateral damage to nearby units, cities, or tile improvements (~30% chance on kinetic disasters)
+  const isDestructive = kind !== 'shore_anomaly' && Math.random() < 0.34;
+  const damagedItems: string[] = [];
+  let totalDamageDealt = 0;
+
+  if (isDestructive) {
+    for (const u of Object.values(state.units)) {
+      const d = hexDistance(u.q, u.r, targetTile.q, targetTile.r);
+      if (d <= 1) {
+        const dmg = 14 + Math.floor(Math.random() * 9);
+        u.hp = Math.max(8, u.hp - dmg);
+        totalDamageDealt += dmg;
+        if (u.civId === playerCiv.id) {
+          damagedItems.push(`${UNIT_DEFS[u.defId]?.name || 'Unit'} (-${dmg} HP)`);
+        }
+      }
+    }
+    for (const c of Object.values(state.cities)) {
+      const d = hexDistance(c.q, c.r, targetTile.q, targetTile.r);
+      if (d <= 1) {
+        const dmg = 15 + Math.floor(Math.random() * 8);
+        c.hp = Math.max(15, c.hp - dmg);
+        totalDamageDealt += dmg;
+        if (c.civId === playerCiv.id) {
+          damagedItems.push(`${c.name} walls/structures (-${dmg} HP)`);
+        }
+      }
+    }
+    for (const coord of hexInRange(targetTile.q, targetTile.r, 1)) {
+      const nt = state.tiles[tileKey(coord.q, coord.r)];
+      if (nt && nt.improvement !== 'none' && !nt.improvementDamaged) {
+        nt.improvementDamaged = true;
+        if (nt.ownerCivId === playerCiv.id) {
+          damagedItems.push(`Pillaged ${nt.improvement.replace('_', ' ')}`);
+        }
+      }
+    }
+  }
+
+  // Expose a newly uncovered scientific feature at the site if none existed
+  if (targetTile.feature === 'none') {
+    if (kind === 'shore_anomaly') {
+      targetTile.feature = Math.random() < 0.55 ? 'rare_flora' : 'ancient_ruins';
+    } else if (kind === 'meteor_strike') {
+      targetTile.feature = Math.random() < 0.65 ? 'iron' : 'copper';
+    } else if (kind === 'volcano_eruption') {
+      targetTile.feature = Math.random() < 0.65 ? 'geothermal_vent' : 'coal';
+    } else if (kind === 'river_flood') {
+      targetTile.feature = Math.random() < 0.65 ? 'fossils' : 'rare_flora';
+    }
+    targetTile.featureSurveyed = false;
+  }
+
+  const damageReport =
+    damagedItems.length > 0
+      ? `Natural shockwave affected nearby positions: ${damagedItems.join(', ')}.`
+      : undefined;
+
+  const eventConfigs: Record<
+    NaturalDisasterKind,
+    {
+      title: string;
+      subtitle: string;
+      narrative: string;
+      primaryDomain: CoreDomain;
+      secondaryDomain: CoreDomain;
+      choice1Label: string;
+      choice1Desc: string;
+      choice2Label: string;
+      choice2Desc: string;
+      choice2Effect: ExplorationEvent['choices'][0]['effect'];
+    }
+  > = {
+    shore_anomaly: {
+      title: 'Strange Flotsam After the Gale',
+      subtitle: 'Coastal Tempest Phenomenon',
+      narrative:
+        'After a violent midnight tempest, receding breakers leave behind luminescent pelagic organisms, crystalline geodes, and a barnacle-encrusted bronze astrolabe mechanism of unknown origin.',
+      primaryDomain: 'cosmos',
+      secondaryDomain: 'life',
+      choice1Label: 'Dissect the pelagic specimens & astrolabe gears',
+      choice1Desc:
+        'Major Cosmos & Biology Core Knowledge breakthrough (+65% Core Spark & +24 Research).',
+      choice2Label: 'Salvage the rare ambergris & metallic alloys',
+      choice2Desc: '+16 Research, +45 Gold to treasury & +15 XP to observing unit.',
+      choice2Effect: { coreBoostDomain: 'life', research: 16, gold: 45, xp: 15 },
+    },
+    meteor_strike: {
+      title: 'Starfall Crater & Siderite Bolide',
+      subtitle: 'Celestial Impact Phenomenon',
+      narrative:
+        'A blinding violet fireball streaks across the heavens and thunderously craters into the earth. Within the smoking basin lies an incandescent core of extraterrestrial nickel-iron and fused tektite glass.',
+      primaryDomain: 'cosmos',
+      secondaryDomain: 'matter',
+      choice1Label: 'Chart the trajectory & analyze the siderite core',
+      choice1Desc:
+        'Major Cosmos & Matter Core Knowledge breakthrough (+65% Core Spark & +28 Research).',
+      choice2Label: 'Forge the meteoric iron & harvest crater minerals',
+      choice2Desc: '+18 Research, +40 Gold & exposes rich metallic ore at the crater.',
+      choice2Effect: { coreBoostDomain: 'matter', research: 18, gold: 40, xp: 15 },
+    },
+    volcano_eruption: {
+      title: 'Pyroclastic Fury & Obsidian Flows',
+      subtitle: 'Tectonic Volcanic Eruption',
+      narrative:
+        'The earth shudders as a highland peak erupts in a column of ash laced with volcanic lightning. As the lava cools into glass-sharp obsidian and sulfur vents, your scholars witness extreme thermal chemistry firsthand.',
+      primaryDomain: 'matter',
+      secondaryDomain: 'physics',
+      choice1Label: 'Measure the thermal vents & crystalline sulfur',
+      choice1Desc:
+        'Major Matter & Physics Core Knowledge breakthrough (+65% Core Spark & +26 Research).',
+      choice2Label: 'Fertilize farmlands with mineral-rich volcanic ash',
+      choice2Desc: '+16 Research, +1 Population in nearest city & +30 Gold.',
+      choice2Effect: { coreBoostDomain: 'physics', research: 16, population: 1, gold: 30 },
+    },
+    river_flood: {
+      title: 'The Great Deluge & Exposed Strata',
+      subtitle: 'Alluvial Flood Phenomenon',
+      narrative:
+        'Swollen by torrential rains, the river bursts its banks in a roaring whitewater deluge. As the floodwaters recede, they leave behind rich alluvial silt and carve open a cliffside teeming with prehistoric fossils and mineral veins.',
+      primaryDomain: 'life',
+      secondaryDomain: 'physics',
+      choice1Label: 'Excavate the exposed fossil strata & study fluid head',
+      choice1Desc:
+        'Major Biology & Physics Core Knowledge breakthrough (+65% Core Spark & +24 Research).',
+      choice2Label: 'Channel the nutrient-rich alluvial silt into crops',
+      choice2Desc: '+15 Research, +1 Population in nearest city & heal observing unit +25 HP.',
+      choice2Effect: { coreBoostDomain: 'physics', research: 15, population: 1, heal: 25 },
+    },
+  };
+
+  const cfg = eventConfigs[kind];
+  state.naturalEventsByAge[currentAgeIdx] = eventsThisAge + 1;
+  state.lastNaturalEventTurn = state.turn;
+
+  state.recentDisasters.push({
+    id: `dis_${kind}_${state.turn}`,
+    kind,
+    q: targetTile.q,
+    r: targetTile.r,
+    title: cfg.title,
+    damageDealt: totalDamageDealt > 0 ? totalDamageDealt : undefined,
+    timestamp: Date.now(),
+  });
+
+  state.notices.unshift({
+    id: `nat_${kind}_${state.turn}`,
+    turn: state.turn,
+    title: cfg.title,
+    detail: `${observer.label}. ${damageReport || 'Scholars rush to study the phenomenon!'}`,
+    kind: 'event',
+    q: targetTile.q,
+    r: targetTile.r,
+  });
+
+  state.activeEvent = {
+    id: `evt_disaster_${kind}_${state.turn}`,
+    title: cfg.title,
+    subtitle: `${cfg.subtitle} · Turn ${state.turn}`,
+    narrative: cfg.narrative,
+    q: targetTile.q,
+    r: targetTile.r,
+    unitId: observer.unitId,
+    disasterKind: kind,
+    observerSummary: observer.label,
+    damageReport,
+    choices: [
+      {
+        label: cfg.choice1Label,
+        description: cfg.choice1Desc,
+        effect: {
+          instantCoreSpark: true,
+          coreBoostDomain: cfg.primaryDomain,
+          research: 25,
+          xp: 18,
+        },
+      },
+      {
+        label: cfg.choice2Label,
+        description: cfg.choice2Desc,
+        effect: cfg.choice2Effect,
+      },
+    ],
+  };
 }
 
 function runAiCivTurn(state: GameState, civId: string) {

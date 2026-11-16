@@ -6,9 +6,11 @@ import {
   Coins,
   Compass,
   Flag,
+  FolderOpen,
   Hammer,
   Handshake,
   HelpCircle,
+  Save,
   SkipForward,
   Sparkles,
   Volume2,
@@ -23,6 +25,8 @@ import {
   DramaticChronicleModal,
   ExplorationEventModal,
   PromotionModal,
+  SaveLoadModal,
+  SurveyDiscoveryModal,
   VictoryModal,
 } from './components/GameModals';
 import { HexMapCanvas } from './components/HexMapCanvas';
@@ -33,22 +37,27 @@ import { MapViewMode, getReachableHexes, hexDistance, tileKey } from './engine/h
 import { generateWorld } from './engine/mapGenerator';
 import { computeDiscoveryModifiers } from './engine/researchEngine';
 import { soundFx } from './engine/soundFx';
+import { resolveTileShoreline } from './engine/spriteAtlas';
 import {
+  SavedGameSlot,
   applyPromotion,
   buyTileForCity,
   clearSavedGame,
   declareWar,
+  deleteSavedGame,
   endTurn,
   establishTradeRoute,
   foundCityWithSettler,
   getCivEconomySummary,
   getPurchasableTilesForCity,
+  listSavedGames,
   loadGameFromLocalStorage,
   makePeace,
   moveUnitTo,
   resolveCombat,
   resolveExplorationEventChoice,
   saveGameToLocalStorage,
+  saveNamedGame,
   startWorkerTask,
   surveyTileFeature,
   toggleOpenBorders,
@@ -61,6 +70,8 @@ export default function App() {
   const [savedSnapshot, setSavedSnapshot] = useState<GameState | null>(() =>
     loadGameFromLocalStorage()
   );
+  const [savedSlots, setSavedSlots] = useState<SavedGameSlot[]>(() => listSavedGames());
+  const [saveLoadModalMode, setSaveLoadModalMode] = useState<'save' | 'load' | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
 
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
@@ -87,6 +98,7 @@ export default function App() {
     saveGameToLocalStorage(fresh);
     setGameState(fresh);
     setSavedSnapshot(fresh);
+    setSavedSlots(listSavedGames());
     const firstScout = Object.values(fresh.units).find(
       (u) => u.civId === fresh.playerCivId && u.defId === 'scout'
     );
@@ -102,19 +114,51 @@ export default function App() {
   };
 
   const handleResumeSaved = () => {
-    const loaded = loadGameFromLocalStorage();
+    const loaded = loadGameFromLocalStorage() ?? savedSlots[0]?.state ?? null;
     if (!loaded) return;
-    setGameState(loaded);
+    setGameState(structuredClone(loaded));
     const cap = Object.values(loaded.cities).find((c) => c.civId === loaded.playerCivId);
     if (cap) {
       setCameraTarget({ q: cap.q, r: cap.r, trigger: Date.now() });
     }
   };
 
+  const handleSaveNamedGame = (title: string, overwriteSlotId?: string) => {
+    if (!gameState) return;
+    saveNamedGame(gameState, title, overwriteSlotId);
+    saveGameToLocalStorage(gameState);
+    setSavedSnapshot(gameState);
+    setSavedSlots(listSavedGames());
+    soundFx.playDiscovery();
+  };
+
+  const handleLoadSlot = (slot: SavedGameSlot) => {
+    const loaded = structuredClone(slot.state);
+    setGameState(loaded);
+    setSavedSnapshot(loaded);
+    setSelectedUnitId(null);
+    setSelectedCityId(null);
+    setBuyTileModeCityId(null);
+    setSaveLoadModalMode(null);
+    const cap = Object.values(loaded.cities).find((c) => c.civId === loaded.playerCivId);
+    if (cap) {
+      setCameraTarget({ q: cap.q, r: cap.r, trigger: Date.now() });
+    }
+    soundFx.playTurnEnd();
+  };
+
+  const handleDeleteSlot = (slotId: string) => {
+    const nextSlots = deleteSavedGame(slotId);
+    setSavedSlots(nextSlots);
+    setSavedSnapshot(loadGameFromLocalStorage() ?? nextSlots[0]?.state ?? null);
+    soundFx.playClick();
+  };
+
   const handleQuitToMenu = () => {
     if (gameState) {
       saveGameToLocalStorage(gameState);
       setSavedSnapshot(gameState);
+      setSavedSlots(listSavedGames());
     }
     setGameState(null);
     setSelectedUnitId(null);
@@ -245,6 +289,7 @@ export default function App() {
     if (selectedUnit && reachableHexes.has(k)) {
       const step = reachableHexes.get(k)!;
       const hadEvent = Boolean(gameState.activeEvent);
+      const hadSurvey = Boolean(gameState.activeSurveyPopup);
       const next = moveUnitTo(structuredClone(gameState), selectedUnit.id, q, r, step.cost);
       setGameState(next);
       const isNaval =
@@ -254,6 +299,8 @@ export default function App() {
       soundFx.playMove(isNaval);
       if (!hadEvent && next.activeEvent) {
         soundFx.playEventPopup();
+      } else if (!hadSurvey && next.activeSurveyPopup) {
+        soundFx.playDiscovery();
       }
       setSelectedTileKey(k);
       return;
@@ -299,6 +346,8 @@ export default function App() {
 
     const next = endTurn(structuredClone(gameState));
     setGameState(next);
+    setSavedSnapshot(next);
+    setSavedSlots(listSavedGames());
     setBuyTileModeCityId(null);
 
     const pCiv = next.civs[next.playerCivId];
@@ -350,7 +399,11 @@ export default function App() {
       setChronicleQueue((prev) => [...prev, ...newChronicles]);
     }
 
-    if (pCiv.ageIndex > prevAge) {
+    const latestDisaster = next.recentDisasters?.[0];
+    if (latestDisaster) {
+      setCameraTarget({ q: latestDisaster.q, r: latestDisaster.r, trigger: Date.now() });
+      soundFx.playNaturalDisaster(latestDisaster.kind);
+    } else if (pCiv.ageIndex > prevAge) {
       soundFx.playAgeAdvance();
     } else if (newInvs.length > 0 || newWonders.length > 0) {
       soundFx.playDiscovery();
@@ -378,14 +431,35 @@ export default function App() {
   };
 
   if (!gameState) {
+    const latestPreview = savedSnapshot ?? savedSlots[0]?.state ?? null;
     return (
-      <TitleScreen
-        hasSavedGame={Boolean(savedSnapshot)}
-        savedTurn={savedSnapshot?.turn}
-        savedCivName={savedSnapshot ? savedSnapshot.civs[savedSnapshot.playerCivId]?.name : undefined}
-        onStartNew={handleStartNew}
-        onResumeSaved={handleResumeSaved}
-      />
+      <>
+        <TitleScreen
+          hasSavedGame={Boolean(latestPreview) || savedSlots.length > 0}
+          savedCount={savedSlots.length}
+          savedTurn={latestPreview?.turn}
+          savedCivName={
+            latestPreview ? latestPreview.civs[latestPreview.playerCivId]?.name : undefined
+          }
+          onStartNew={handleStartNew}
+          onResumeSaved={handleResumeSaved}
+          onOpenLoadModal={() => {
+            setSavedSlots(listSavedGames());
+            setSaveLoadModalMode('load');
+          }}
+        />
+        {saveLoadModalMode && (
+          <SaveLoadModal
+            mode="load"
+            state={null}
+            savedSlots={savedSlots}
+            onSave={handleSaveNamedGame}
+            onLoad={handleLoadSlot}
+            onDelete={handleDeleteSlot}
+            onClose={() => setSaveLoadModalMode(null)}
+          />
+        )}
+      </>
     );
   }
 
@@ -473,6 +547,28 @@ export default function App() {
           >
             <Handshake className="w-3.5 h-3.5" />
             <span>Diplomacy</span>
+          </button>
+          <button
+            onClick={() => {
+              setSavedSlots(listSavedGames());
+              setSaveLoadModalMode('save');
+            }}
+            className="px-2.5 py-1.5 rounded-lg bg-[#d4af5a]/20 hover:bg-[#d4af5a]/30 border border-[#e6c983]/45 text-[#f8f3e6] text-xs font-medium flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+            title="Save Campaign"
+          >
+            <Save className="w-3.5 h-3.5 text-[#e6c983]" />
+            <span>Save</span>
+          </button>
+          <button
+            onClick={() => {
+              setSavedSlots(listSavedGames());
+              setSaveLoadModalMode('load');
+            }}
+            className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/15 text-slate-200 text-xs font-medium flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+            title="Load Saved Campaign"
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-sky-300" />
+            <span>Load</span>
           </button>
           <button
             onClick={() => setShowHelpModal(true)}
@@ -578,35 +674,66 @@ export default function App() {
         {/* Bottom-Left: Tile Inspector */}
         <div className="pointer-events-auto w-72 p-3.5 rounded-xl bg-[#0c1822]/92 backdrop-blur-md border border-[#b89758]/40 shadow-xl">
           {inspectedTile && inspectedTile.exploredBy[playerCiv.id] ? (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-white capitalize">
-                  {inspectedTile.biome} · {inspectedTile.temperature}
-                </span>
-                {inspectedTile.hasRiver && (
-                  <span className="text-[11px] text-sky-300">Riverbank (+1 Food, +1 Gold)</span>
-                )}
-              </div>
-              {inspectedTile.feature !== 'none' && (
-                <div className="text-[11px] text-amber-300">
-                  Feature: {inspectedTile.wonderName || inspectedTile.feature.replace('_', ' ')}{' '}
-                  {inspectedTile.featureSurveyed ? '(Surveyed)' : '(Unsurveyed — Send Explorer)'}
+            (() => {
+              const shore = resolveTileShoreline(inspectedTile, gameState.tiles, gameState.height);
+              const shoreLabels: Record<string, string> = {
+                sandy_beach: 'Sandy Beach Shore',
+                rocky_shore: 'Rocky Shore (+1 Prod)',
+                high_cliffs: 'High Sea Cliffs (+1 Prod)',
+                coastal_swamp: 'Coastal Swamp & Mangrove (+1 Food, +1 Prod)',
+                coral_reef: 'Coral Reef Lagoon (+1 Food, +1 Sci)',
+                icy_shore: 'Arctic Icy Shore',
+              };
+              const clusterLabels: Record<string, string> = {
+                desert_oasis: 'Oasis Sanctuary Cluster',
+                mountain_massif: 'Sovereign Mountain Massif',
+                coral_lagoon: 'Coral Reef Lagoon & Atoll Cluster',
+                coastal_swamp_delta: 'River Delta & Swamp Cluster',
+                cliff_headland: 'Sea Cliff Headland Cluster',
+                icy_fjord: 'Arctic Pack-Ice Fjord Cluster',
+              };
+              return (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-white capitalize">
+                      {inspectedTile.biome} · {inspectedTile.temperature}
+                    </span>
+                    {inspectedTile.hasRiver && (
+                      <span className="text-[11px] text-sky-300">Riverbank (+1 Food, +1 Gold)</span>
+                    )}
+                  </div>
+                  {shore !== 'none' && shoreLabels[shore] && (
+                    <div className="text-[11px] text-cyan-300">
+                      Shoreline: {shoreLabels[shore]}
+                    </div>
+                  )}
+                  {inspectedTile.clusterType && clusterLabels[inspectedTile.clusterType] && (
+                    <div className="text-[11px] text-teal-300 font-medium">
+                      Formation: {clusterLabels[inspectedTile.clusterType]}
+                    </div>
+                  )}
+                  {inspectedTile.feature !== 'none' && (
+                    <div className="text-[11px] text-amber-300">
+                      Feature: {inspectedTile.wonderName || inspectedTile.feature.replace('_', ' ')}{' '}
+                      {inspectedTile.featureSurveyed ? '(Surveyed)' : '(Unsurveyed — Send Explorer)'}
+                    </div>
+                  )}
+                  {inspectedTile.improvement !== 'none' && (
+                    <div
+                      className={`text-[11px] ${
+                        inspectedTile.improvementDamaged ? 'text-rose-300 font-semibold' : 'text-emerald-300'
+                      }`}
+                    >
+                      Improvement: {inspectedTile.improvement.replace('_', ' ')}{' '}
+                      {inspectedTile.improvementDamaged ? '— DAMAGED (Needs Worker Repair)' : ''}
+                    </div>
+                  )}
+                  {inspectedTile.hasRoad && (
+                    <div className="text-[11px] text-slate-300">Paved Road (0.5 Move Cost)</div>
+                  )}
                 </div>
-              )}
-              {inspectedTile.improvement !== 'none' && (
-                <div
-                  className={`text-[11px] ${
-                    inspectedTile.improvementDamaged ? 'text-rose-300 font-semibold' : 'text-emerald-300'
-                  }`}
-                >
-                  Improvement: {inspectedTile.improvement.replace('_', ' ')}{' '}
-                  {inspectedTile.improvementDamaged ? '— DAMAGED (Needs Worker Repair)' : ''}
-                </div>
-              )}
-              {inspectedTile.hasRoad && (
-                <div className="text-[11px] text-slate-300">Paved Road (0.5 Move Cost)</div>
-              )}
-            </div>
+              );
+            })()
           ) : (
             <div className="text-xs text-slate-400">
               Unexplored Frontier — Move Scouts or Ships to reveal veiled terrain.
@@ -832,7 +959,19 @@ export default function App() {
         />
       )}
 
-      {!gameState.activeEvent && chronicleQueue.length > 0 && (
+      {!gameState.activeEvent && gameState.activeSurveyPopup && (
+        <SurveyDiscoveryModal
+          popup={gameState.activeSurveyPopup}
+          onClose={() => {
+            const next = structuredClone(gameState);
+            next.activeSurveyPopup = null;
+            setGameState(next);
+            soundFx.playClick();
+          }}
+        />
+      )}
+
+      {!gameState.activeEvent && !gameState.activeSurveyPopup && chronicleQueue.length > 0 && (
         <DramaticChronicleModal
           chronicle={chronicleQueue[0]}
           onDismiss={() => {
@@ -860,8 +999,21 @@ export default function App() {
           onRestart={() => {
             clearSavedGame();
             setSavedSnapshot(null);
+            setSavedSlots(listSavedGames());
             setGameState(null);
           }}
+        />
+      )}
+
+      {saveLoadModalMode && (
+        <SaveLoadModal
+          mode={saveLoadModalMode}
+          state={gameState}
+          savedSlots={savedSlots}
+          onSave={handleSaveNamedGame}
+          onLoad={handleLoadSlot}
+          onDelete={handleDeleteSlot}
+          onClose={() => setSaveLoadModalMode(null)}
         />
       )}
 

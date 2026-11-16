@@ -15,6 +15,10 @@ import {
   getInfrastructureSprite,
   getTerrainTileSprite,
   getUnitMiniatureSprite,
+  isBiomeTransitionTile,
+  isHighSovereignPeak,
+  isOasisCenterTile,
+  resolveTileShoreline,
   spriteAtlas,
 } from '../engine/spriteAtlas';
 import { getTilePurchaseCost, previewCombat } from '../engine/turnEngine';
@@ -24,6 +28,8 @@ import {
   CombatAnimation,
   GameState,
   HexTile,
+  NaturalDisasterVfx,
+  ShorelineType,
   UnitDef,
   UnitState,
 } from '../types/game';
@@ -84,6 +90,64 @@ const NEIGHBOR_OFFSETS: Array<[number, number]> = [
 ];
 
 const BATTLE_FX_DURATION_MS = 850;
+const DISASTER_FX_DURATION_MS = 2800;
+const UNIT_STEP_DURATION_MS = 215;
+
+interface UnitMoveAnim {
+  waypoints: Array<{ q: number; r: number }>;
+  startTime: number;
+  stepMs: number;
+}
+
+function findShortestHexSteps(
+  fromQ: number,
+  fromR: number,
+  toQ: number,
+  toR: number,
+  tiles: Record<string, HexTile>
+): Array<{ q: number; r: number }> {
+  if (fromQ === toQ && fromR === toR) return [{ q: toQ, r: toR }];
+  const startKey = tileKey(fromQ, fromR);
+  const targetKey = tileKey(toQ, toR);
+  const parentMap = new Map<string, string | null>();
+  parentMap.set(startKey, null);
+  const queue: Array<{ q: number; r: number; dist: number }> = [{ q: fromQ, r: fromR, dist: 0 }];
+
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    const curKey = tileKey(cur.q, cur.r);
+    if (curKey === targetKey) break;
+    if (cur.dist >= 7) continue;
+
+    for (const [dq, dr] of NEIGHBOR_OFFSETS) {
+      const nq = cur.q + dq;
+      const nr = cur.r + dr;
+      const nk = tileKey(nq, nr);
+      if (parentMap.has(nk)) continue;
+      const nt = tiles[nk];
+      if (!nt || (nt.biome === 'mountain' && nk !== targetKey)) continue;
+      parentMap.set(nk, curKey);
+      queue.push({ q: nq, r: nr, dist: cur.dist + 1 });
+    }
+  }
+
+  if (!parentMap.has(targetKey)) {
+    return [
+      { q: fromQ, r: fromR },
+      { q: toQ, r: toR },
+    ];
+  }
+
+  const path: Array<{ q: number; r: number }> = [];
+  let cur: string | null = targetKey;
+  while (cur) {
+    const [q, r] = cur.split(',').map(Number);
+    path.push({ q, r });
+    cur = parentMap.get(cur) ?? null;
+  }
+  path.reverse();
+  return path;
+}
 
 export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
   state,
@@ -110,6 +174,15 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
   // Track transient active combat VFX (stops cleanly once finished)
   const activeCombatsRef = useRef<CombatAnimation[]>([]);
   const seenCombatIdsRef = useRef<Set<string>>(new Set());
+
+  // Track transient active Natural Disaster / Phenomenon VFX
+  const activeDisastersRef = useRef<NaturalDisasterVfx[]>([]);
+  const seenDisasterIdsRef = useRef<Set<string>>(new Set());
+
+  // Track smooth tile-to-tile unit movement animations
+  const prevGameIdRef = useRef<string>(state.id);
+  const prevUnitCoordsRef = useRef<Map<string, { q: number; r: number }>>(new Map());
+  const activeUnitMovesRef = useRef<Map<string, UnitMoveAnim>>(new Map());
 
   const dragRef = useRef<{
     dragging: boolean;
@@ -146,6 +219,63 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
     };
   }, []);
 
+  // Detect unit position changes and animate smooth step-by-step movement from tile to tile
+  useEffect(() => {
+    if (prevGameIdRef.current !== state.id) {
+      prevGameIdRef.current = state.id;
+      prevUnitCoordsRef.current.clear();
+      activeUnitMovesRef.current.clear();
+    }
+
+    const now = performance.now();
+    let addedAnim = false;
+    const nextCoords = new Map<string, { q: number; r: number }>();
+
+    const trackEntity = (id: string, q: number, r: number) => {
+      nextCoords.set(id, { q, r });
+      const prev = prevUnitCoordsRef.current.get(id);
+      if (prev && (prev.q !== q || prev.r !== r)) {
+        const waypoints = findShortestHexSteps(prev.q, prev.r, q, r, state.tiles);
+        if (waypoints.length >= 2) {
+          activeUnitMovesRef.current.set(id, {
+            waypoints,
+            startTime: now,
+            stepMs: UNIT_STEP_DURATION_MS,
+          });
+          addedAnim = true;
+        }
+      }
+    };
+
+    for (const u of Object.values(state.units)) {
+      trackEntity(u.id, u.q, u.r);
+    }
+    for (const bu of Object.values(state.barbarianUnits)) {
+      trackEntity(bu.id, bu.q, bu.r);
+    }
+
+    prevUnitCoordsRef.current = nextCoords;
+
+    if (!addedAnim && activeUnitMovesRef.current.size === 0) return;
+
+    let rafId = 0;
+    const step = () => {
+      const tNow = performance.now();
+      for (const [id, anim] of activeUnitMovesRef.current.entries()) {
+        const totalDuration = Math.max(1, anim.waypoints.length - 1) * anim.stepMs;
+        if (tNow - anim.startTime >= totalDuration) {
+          activeUnitMovesRef.current.delete(id);
+        }
+      }
+      setRenderTick((v) => v + 1);
+      if (activeUnitMovesRef.current.size > 0) {
+        rafId = requestAnimationFrame(step);
+      }
+    };
+    rafId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafId);
+  }, [state.id, state.units, state.barbarianUnits, state.tiles]);
+
   // Register incoming combat bursts and run one-shot RAF loop until effects finish
   useEffect(() => {
     if (!state.recentCombats || state.recentCombats.length === 0) return;
@@ -174,6 +304,35 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
     rafId = requestAnimationFrame(step);
     return () => cancelAnimationFrame(rafId);
   }, [state.recentCombats]);
+
+  // Register incoming natural phenomenon / disaster VFX bursts
+  useEffect(() => {
+    if (!state.recentDisasters || state.recentDisasters.length === 0) return;
+    const now = Date.now();
+    let added = false;
+    for (const d of state.recentDisasters) {
+      if (!seenDisasterIdsRef.current.has(d.id)) {
+        seenDisasterIdsRef.current.add(d.id);
+        activeDisastersRef.current.push({ ...d, timestamp: now });
+        added = true;
+      }
+    }
+    if (!added) return;
+
+    let rafId = 0;
+    const step = () => {
+      const tNow = Date.now();
+      activeDisastersRef.current = activeDisastersRef.current.filter(
+        (d) => tNow - d.timestamp < DISASTER_FX_DURATION_MS
+      );
+      setRenderTick((v) => v + 1);
+      if (activeDisastersRef.current.length > 0) {
+        rafId = requestAnimationFrame(step);
+      }
+    };
+    rafId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafId);
+  }, [state.recentDisasters]);
 
   useEffect(() => {
     if (prevViewModeRef.current !== viewMode) {
@@ -359,19 +518,34 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       const exactPts = getHexCorners(px, py, HEX_SIZE, yScale);
 
       if (isWater) {
+        const coastShore =
+          tile.biome === 'coast'
+            ? resolveTileShoreline(tile, state.tiles, state.height)
+            : 'none';
+
         drawHexPath(ctx, groundPts);
         if (patterns.ocean) {
           ctx.fillStyle = patterns.ocean;
           ctx.fill();
           ctx.fillStyle =
-            tile.biome === 'coast' ? 'rgba(42, 134, 158, 0.34)' : 'rgba(14, 34, 54, 0.48)';
+            tile.biome === 'coast'
+              ? coastShore === 'coral_reef'
+                ? 'rgba(20, 184, 166, 0.38)'
+                : coastShore === 'coastal_swamp'
+                  ? 'rgba(21, 94, 67, 0.42)'
+                  : coastShore === 'icy_shore'
+                    ? 'rgba(125, 211, 252, 0.34)'
+                    : coastShore === 'high_cliffs' || coastShore === 'rocky_shore'
+                      ? 'rgba(30, 88, 118, 0.38)'
+                      : 'rgba(42, 134, 158, 0.36)'
+              : 'rgba(14, 34, 54, 0.50)';
           ctx.fill();
         } else {
           ctx.fillStyle = tile.biome === 'coast' ? '#2c5f76' : '#183347';
           ctx.fill();
         }
 
-        // Shallow turquoise lagoon glow along any coastal edge bordering land
+        // Smooth Coastal Shelf & Coast <-> Ocean feathering
         if (tile.biome === 'coast') {
           ctx.save();
           drawHexPath(ctx, groundPts);
@@ -379,17 +553,56 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
           for (let e = 0; e < 6; e++) {
             const [dq, dr] = NEIGHBOR_OFFSETS[e];
             const nt = state.tiles[tileKey(tile.q + dq, tile.r + dr)];
+            const pA = exactPts[e];
+            const pB = exactPts[(e + 1) % 6];
+            const mx = (pA.x + pB.x) * 0.5;
+            const my = (pA.y + pB.y) * 0.5;
+
             if (nt && nt.biome !== 'ocean' && nt.biome !== 'coast') {
-              const pA = exactPts[e];
-              const pB = exactPts[(e + 1) % 6];
-              const mx = (pA.x + pB.x) * 0.5;
-              const my = (pA.y + pB.y) * 0.5;
+              const edgeShore =
+                nt.shoreline && nt.shoreline !== 'none' ? nt.shoreline : coastShore;
               const grad = ctx.createLinearGradient(mx, my, px, py);
-              grad.addColorStop(0, 'rgba(103, 232, 249, 0.34)');
-              grad.addColorStop(0.55, 'rgba(56, 189, 248, 0.10)');
-              grad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+              if (edgeShore === 'sandy_beach') {
+                grad.addColorStop(0, 'rgba(242, 218, 160, 0.58)');
+                grad.addColorStop(0.32, 'rgba(72, 219, 209, 0.42)');
+                grad.addColorStop(0.75, 'rgba(56, 189, 248, 0.12)');
+                grad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+              } else if (edgeShore === 'coral_reef') {
+                grad.addColorStop(0, 'rgba(103, 232, 249, 0.56)');
+                grad.addColorStop(0.5, 'rgba(45, 212, 191, 0.28)');
+                grad.addColorStop(1, 'rgba(45, 212, 191, 0)');
+              } else if (edgeShore === 'coastal_swamp') {
+                grad.addColorStop(0, 'rgba(63, 98, 18, 0.52)');
+                grad.addColorStop(0.45, 'rgba(13, 148, 136, 0.28)');
+                grad.addColorStop(1, 'rgba(13, 148, 136, 0)');
+              } else if (edgeShore === 'icy_shore') {
+                grad.addColorStop(0, 'rgba(226, 232, 240, 0.62)');
+                grad.addColorStop(0.5, 'rgba(125, 211, 252, 0.24)');
+                grad.addColorStop(1, 'rgba(125, 211, 252, 0)');
+              } else {
+                grad.addColorStop(0, 'rgba(186, 230, 253, 0.42)');
+                grad.addColorStop(0.45, 'rgba(56, 189, 248, 0.16)');
+                grad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+              }
               ctx.fillStyle = grad;
-              ctx.fillRect(px - HEX_SIZE * 1.1, py - HEX_SIZE * yScale * 1.1, HEX_SIZE * 2.2, HEX_SIZE * yScale * 2.2);
+              ctx.beginPath();
+              ctx.moveTo(pA.x, pA.y);
+              ctx.lineTo(pB.x, pB.y);
+              ctx.lineTo(px, py);
+              ctx.closePath();
+              ctx.fill();
+            } else if (nt && nt.biome === 'ocean') {
+              // Feather coast into deep ocean across shared water edge
+              const oGrad = ctx.createLinearGradient(mx, my, px, py);
+              oGrad.addColorStop(0, 'rgba(14, 34, 54, 0.44)');
+              oGrad.addColorStop(0.65, 'rgba(14, 34, 54, 0)');
+              ctx.fillStyle = oGrad;
+              ctx.beginPath();
+              ctx.moveTo(pA.x, pA.y);
+              ctx.lineTo(pB.x, pB.y);
+              ctx.lineTo(px, py);
+              ctx.closePath();
+              ctx.fill();
             }
           }
           ctx.restore();
@@ -426,7 +639,7 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
         ctx.fill();
       }
 
-      // Side-to-side biome transition feathering across shared hex edges!
+      // Side-to-side biome transition feathering & ecotone blending across shared hex edges!
       for (let e = 0; e < 6; e++) {
         const [dq, dr] = NEIGHBOR_OFFSETS[e];
         const nt = state.tiles[tileKey(tile.q + dq, tile.r + dr)];
@@ -439,10 +652,11 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
           const pB = exactPts[(e + 1) % 6];
           const mx = (pA.x + pB.x) * 0.5;
           const my = (pA.y + pB.y) * 0.5;
-          const ix = mx + (px - mx) * 0.48;
-          const iy = my + (py - my) * 0.48;
+          const ix = mx + (px - mx) * 0.72;
+          const iy = my + (py - my) * 0.72;
           const bGrad = ctx.createLinearGradient(mx, my, ix, iy);
           bGrad.addColorStop(0, neighborTone);
+          bGrad.addColorStop(0.55, neighborTone.replace(/[\d.]+\)$/, '0.28)'));
           bGrad.addColorStop(1, 'rgba(0,0,0,0)');
           ctx.fillStyle = bGrad;
           ctx.beginPath();
@@ -451,6 +665,30 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
           ctx.lineTo(px, py);
           ctx.closePath();
           ctx.fill();
+
+          // Organic steppe grass tufts & sand drifts bridging Desert <-> Grass Hills / Plains borders
+          const isDesertToGreen =
+            (tile.biome === 'desert' &&
+              (nt.biome === 'hills' || nt.biome === 'plains' || nt.biome === 'forest')) ||
+            ((tile.biome === 'hills' || tile.biome === 'plains') && nt.biome === 'desert');
+          if (isDesertToGreen) {
+            const ex = pB.x - pA.x;
+            const ey = pB.y - pA.y;
+            const nx = (px - mx) * 0.26;
+            const ny = (py - my) * 0.26;
+            for (let s = 0; s < 3; s++) {
+              const t = 0.22 + s * 0.28;
+              const tx = pA.x + ex * t + nx * (s % 2 === 0 ? 0.55 : 0.9);
+              const ty = pA.y + ey * t + ny * (s % 2 === 0 ? 0.55 : 0.9);
+              ctx.fillStyle =
+                tile.biome === 'desert'
+                  ? 'rgba(108, 142, 62, 0.52)'
+                  : 'rgba(222, 184, 104, 0.55)';
+              ctx.beginPath();
+              ctx.ellipse(tx, ty, 5.2, 2.8 * yScale, 0, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
         }
       }
 
@@ -476,40 +714,29 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       ctx.lineWidth = 0.7;
       ctx.stroke();
 
-      // Coastline cliffs & crashing white surf ONLY on edges meeting water
+      // Diverse Shoreline Transitions (Sandy Beaches, Rocky Shores, High Cliffs, Swamps, Coral Reefs, Icy Shores)
       for (let e = 0; e < 6; e++) {
         const [dq, dr] = NEIGHBOR_OFFSETS[e];
         const nt = state.tiles[tileKey(tile.q + dq, tile.r + dr)];
         if (nt && (nt.biome === 'ocean' || nt.biome === 'coast')) {
           const pA = exactPts[e];
           const pB = exactPts[(e + 1) % 6];
-          // White surf outside shoreline
-          ctx.strokeStyle = 'rgba(224, 247, 255, 0.62)';
-          ctx.lineWidth = 3.6;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(pA.x, pA.y);
-          ctx.lineTo(pB.x, pB.y);
-          ctx.stroke();
-
-          // Warm rocky coastal cliff lip (thicker on front-facing edges 0,1,2 in isometric view)
-          const cliffDepth = isIso && (e === 0 || e === 1 || e === 2) ? 5.5 : 2.6;
-          ctx.fillStyle = tile.temperature === 'arid' ? '#9c6e46' : tile.temperature === 'arctic' ? '#64748b' : '#71563b';
-          ctx.beginPath();
-          ctx.moveTo(pA.x, pA.y);
-          ctx.lineTo(pB.x, pB.y);
-          ctx.lineTo(pB.x, pB.y + cliffDepth);
-          ctx.lineTo(pA.x, pA.y + cliffDepth);
-          ctx.closePath();
-          ctx.fill();
-
-          // Sandy beach highlight
-          ctx.strokeStyle = tile.temperature === 'arctic' ? 'rgba(226, 232, 240, 0.7)' : 'rgba(232, 208, 152, 0.78)';
-          ctx.lineWidth = 2.0;
-          ctx.beginPath();
-          ctx.moveTo(pA.x, pA.y);
-          ctx.lineTo(pB.x, pB.y);
-          ctx.stroke();
+          const edgeShore =
+            nt.shoreline && nt.shoreline !== 'none'
+              ? nt.shoreline
+              : resolveTileShoreline(tile, state.tiles, state.height);
+          drawTypedShorelineTransition(
+            ctx,
+            tile,
+            pA,
+            pB,
+            px,
+            py,
+            e,
+            edgeShore,
+            isIso,
+            yScale
+          );
         }
       }
     }
@@ -544,11 +771,11 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
         tile.biome === 'forest' ||
         tile.biome === 'hills' ||
         tile.biome === 'mountain' ||
+        tile.biome === 'coast' ||
         tile.feature === 'ancient_ruins' ||
         tile.feature === 'natural_wonder' ||
-        (tile.temperature === 'tropical' &&
-          (tile.biome === 'plains' || tile.biome === 'coast')) ||
-        tile.biome === 'desert';
+        tile.biome === 'desert' ||
+        isBiomeTransitionTile(tile, state.tiles);
 
       if (cityOnTile) {
         const cityCiv = state.civs[cityOnTile.civId];
@@ -562,16 +789,59 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       } else if (tile.improvement !== 'none' && tile.improvement !== 'road') {
         dioramaSprite = getInfrastructureSprite(tile.improvement, playerAge, tile.q, tile.r);
       } else if (shouldDrawTerrainDiorama) {
-        dioramaSprite = getTerrainTileSprite(tile, hasAdjLand);
+        dioramaSprite = getTerrainTileSprite(tile, hasAdjLand, state.tiles);
+      }
+
+      // Multi-tile cluster base bridging (fuses High Peaks + Companion Mountains + Foothills, and Oasis + Rim Dunes)
+      if (isIso && !cityOnTile) {
+        if (tile.biome === 'mountain') {
+          for (const [dq, dr] of NEIGHBOR_OFFSETS) {
+            const nt = state.tiles[tileKey(tile.q + dq, tile.r + dr)];
+            if (nt && (nt.biome === 'mountain' || nt.biome === 'hills') && nt.exploredBy[playerCivId]) {
+              const np = axialToPixel(nt.q, nt.r, viewMode);
+              const mx = (px + np.x) * 0.5;
+              const my = (py + np.y) * 0.5;
+              const ridgeGrad = ctx.createRadialGradient(mx, my, 2, mx, my, HEX_SIZE * 0.62);
+              const ridgeColor =
+                tile.temperature === 'tropical'
+                  ? 'rgba(30, 82, 44, 0.42)'
+                  : tile.temperature === 'arid'
+                    ? 'rgba(154, 92, 54, 0.42)'
+                    : 'rgba(71, 85, 105, 0.42)';
+              ridgeGrad.addColorStop(0, ridgeColor);
+              ridgeGrad.addColorStop(1, 'rgba(0,0,0,0)');
+              ctx.fillStyle = ridgeGrad;
+              ctx.beginPath();
+              ctx.ellipse(mx, my, HEX_SIZE * 0.62, HEX_SIZE * yScale * 0.62, 0, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        } else if (tile.biome === 'desert' && isOasisCenterTile(tile, state.tiles)) {
+          const oasisHalo = ctx.createRadialGradient(px, py, HEX_SIZE * 0.3, px, py, HEX_SIZE * 1.45);
+          oasisHalo.addColorStop(0, 'rgba(52, 211, 153, 0.28)');
+          oasisHalo.addColorStop(0.55, 'rgba(132, 204, 22, 0.14)');
+          oasisHalo.addColorStop(1, 'rgba(222, 184, 104, 0)');
+          ctx.fillStyle = oasisHalo;
+          ctx.beginPath();
+          ctx.ellipse(px, py, HEX_SIZE * 1.45, HEX_SIZE * yScale * 1.45, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       if (isIso && dioramaSprite && dioramaSprite.dioramaCanvas) {
-        const scale = hexDrawWidth / dioramaSprite.width;
-        const drawH = (dioramaSprite.dioramaHeight ?? dioramaSprite.height) * scale;
+        const isSovereignMtn =
+          !cityOnTile && tile.biome === 'mountain' && isHighSovereignPeak(tile, state.tiles);
+        const isSubMtn = !cityOnTile && tile.biome === 'mountain' && !isSovereignMtn;
+        const widthMult = isSovereignMtn ? 1.08 : isSubMtn ? 0.96 : 1.0;
+        const heightMult = isSovereignMtn ? 1.15 : isSubMtn ? 0.92 : 1.0;
+
+        const targetW = hexDrawWidth * widthMult;
+        const scale = targetW / dioramaSprite.width;
+        const drawH = (dioramaSprite.dioramaHeight ?? dioramaSprite.height) * scale * heightMult;
         const bottomDiamondY = py + HEX_SIZE * yScale;
-        const drawX = px - hexDrawWidth / 2;
+        const drawX = px - targetW / 2;
         const drawY = bottomDiamondY - drawH;
-        ctx.drawImage(dioramaSprite.dioramaCanvas, drawX, drawY, hexDrawWidth, drawH);
+        ctx.drawImage(dioramaSprite.dioramaCanvas, drawX, drawY, targetW, drawH);
 
         if (tile.improvementDamaged && tile.improvement !== 'none') {
           drawHexPath(ctx, getHexCorners(px, py, HEX_SIZE * 0.78, yScale));
@@ -757,25 +1027,81 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       );
     }
 
-    // PASS 8: 3D Strategy Unit Miniatures + Floating Civ Pins
-    const sortedBarbUnits = Object.values(state.barbarianUnits).sort(
-      (a, b) => a.r - b.r || a.q - b.q
-    );
-    for (const bu of sortedBarbUnits) {
-      const tile = state.tiles[tileKey(bu.q, bu.r)];
-      if (!tile?.visibleTo[playerCivId]) continue;
-      const { x: px, y: py } = axialToPixel(bu.q, bu.r, viewMode);
-      drawBarbarianMiniature(ctx, bu.disposition === 'peaceful', bu.hp, bu.maxHp, px, py);
+    // PASS 8: 3D Strategy Unit Miniatures + Floating Civ Pins (with smooth tile-to-tile interpolation)
+    const nowPerf = performance.now();
+    const resolveAnimatedPos = (id: string, q: number, r: number) => {
+      const anim = activeUnitMovesRef.current.get(id);
+      if (anim && anim.waypoints.length >= 2) {
+        const totalSteps = anim.waypoints.length - 1;
+        const rawProgress = (nowPerf - anim.startTime) / anim.stepMs;
+        if (rawProgress >= 0 && rawProgress < totalSteps) {
+          const segIdx = Math.min(totalSteps - 1, Math.floor(rawProgress));
+          const segT = rawProgress - segIdx;
+          const easedT =
+            totalSteps === 1
+              ? segT * segT * (3 - 2 * segT)
+              : segIdx === 0
+                ? segT * segT * (2 - segT)
+                : segIdx === totalSteps - 1
+                  ? 1 - (1 - segT) * (1 - segT)
+                  : segT;
+          const p0 = axialToPixel(anim.waypoints[segIdx].q, anim.waypoints[segIdx].r, viewMode);
+          const p1 = axialToPixel(
+            anim.waypoints[segIdx + 1].q,
+            anim.waypoints[segIdx + 1].r,
+            viewMode
+          );
+          const strideLift = Math.sin(segT * Math.PI) * 5.2;
+          return {
+            px: p0.x + (p1.x - p0.x) * easedT,
+            py: p0.y + (p1.y - p0.y) * easedT,
+            strideLift,
+          };
+        }
+      }
+      const pos = axialToPixel(q, r, viewMode);
+      return { px: pos.x, py: pos.y, strideLift: 0 };
+    };
+
+    const barbDrawList = Object.values(state.barbarianUnits)
+      .filter((bu) => state.tiles[tileKey(bu.q, bu.r)]?.visibleTo[playerCivId])
+      .map((bu) => ({ bu, ...resolveAnimatedPos(bu.id, bu.q, bu.r) }))
+      .sort((a, b) => a.py - b.py || a.px - b.px);
+
+    for (const item of barbDrawList) {
+      drawBarbarianMiniature(
+        ctx,
+        item.bu.disposition === 'peaceful',
+        item.bu.hp,
+        item.bu.maxHp,
+        item.px,
+        item.py,
+        item.strideLift
+      );
     }
 
-    const sortedUnits = Object.values(state.units).sort((a, b) => a.r - b.r || a.q - b.q);
-    for (const unit of sortedUnits) {
-      const tile = state.tiles[tileKey(unit.q, unit.r)];
-      if (unit.civId !== playerCivId && !tile?.visibleTo[playerCivId]) continue;
-      const { x: px, y: py } = axialToPixel(unit.q, unit.r, viewMode);
+    const unitDrawList = Object.values(state.units)
+      .filter((unit) => {
+        const tile = state.tiles[tileKey(unit.q, unit.r)];
+        return unit.civId === playerCivId || Boolean(tile?.visibleTo[playerCivId]);
+      })
+      .map((unit) => ({ unit, ...resolveAnimatedPos(unit.id, unit.q, unit.r) }))
+      .sort((a, b) => a.py - b.py || a.px - b.px);
+
+    for (const item of unitDrawList) {
+      const { unit, px, py, strideLift } = item;
       const civ = state.civs[unit.civId];
       const def = UNIT_DEFS[unit.defId];
-      drawIllustratedUnit(ctx, unit, def, civ.color, selectedUnitId === unit.id, px, py);
+      drawIllustratedUnit(
+        ctx,
+        unit,
+        def,
+        civ.color,
+        selectedUnitId === unit.id,
+        px,
+        py,
+        strideLift
+      );
     }
 
     // PASS 9: Hover Tactical Combat Odds Preview
@@ -790,7 +1116,7 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       }
     }
 
-    // PASS 10: One-Shot Visual Battle FX (Slashes, Arrows, Cannon Fire, Shockwaves & Floating Damage)
+    // PASS 10: One-Shot Visual Battle FX & Natural Phenomenon / Disaster VFX
     if (activeCombatsRef.current.length > 0) {
       const tNow = Date.now();
       for (const fx of activeCombatsRef.current) {
@@ -798,6 +1124,15 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
         const fromPos = axialToPixel(fx.fromQ, fx.fromR, viewMode);
         const toPos = axialToPixel(fx.toQ, fx.toR, viewMode);
         drawCombatFxEffect(ctx, fx, fromPos.x, fromPos.y, toPos.x, toPos.y, progress);
+      }
+    }
+
+    if (activeDisastersRef.current.length > 0) {
+      const tNow = Date.now();
+      for (const dis of activeDisastersRef.current) {
+        const progress = Math.min(1, Math.max(0, (tNow - dis.timestamp) / DISASTER_FX_DURATION_MS));
+        const pos = axialToPixel(dis.q, dis.r, viewMode);
+        drawNaturalDisasterFx(ctx, dis, pos.x, pos.y, progress);
       }
     }
 
@@ -1774,14 +2109,16 @@ function drawIllustratedUnit(
   civColor: string,
   selected: boolean,
   px: number,
-  cy: number
+  cy: number,
+  strideLift = 0
 ) {
-  const uy = cy - 2;
+  const uy = cy - 2 - strideLift;
   ctx.save();
 
+  const shadowScale = Math.max(0.8, 1 - strideLift * 0.025);
   ctx.fillStyle = 'rgba(0,0,0,0.42)';
   ctx.beginPath();
-  ctx.ellipse(px, cy + 6.5, 13, 5.2, 0, 0, Math.PI * 2);
+  ctx.ellipse(px, cy + 6.5, 13 * shadowScale, 5.2 * shadowScale, 0, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.strokeStyle = selected ? '#fbbf24' : civColor;
@@ -1800,7 +2137,7 @@ function drawIllustratedUnit(
         : 38;
     const drawW = targetH * (unitSprite.width / unitSprite.height);
     const drawX = px - drawW / 2;
-    const drawY = cy + 8 - targetH;
+    const drawY = cy + 8 - targetH - strideLift;
     ctx.drawImage(unitSprite.canvas, drawX, drawY, drawW, targetH);
     pinY = drawY - 6;
   } else {
@@ -1904,16 +2241,18 @@ function drawBarbarianMiniature(
   hp: number,
   maxHp: number,
   px: number,
-  cy: number
+  cy: number,
+  strideLift = 0
 ) {
-  const uy = cy - 2;
+  const uy = cy - 2 - strideLift;
   ctx.save();
   const atlas = spriteAtlas.getAtlas('units');
   const barbSprite = atlas?.byCoord.get(peaceful ? '4,0' : '5,0');
 
+  const shadowScale = Math.max(0.8, 1 - strideLift * 0.025);
   ctx.fillStyle = 'rgba(0,0,0,0.42)';
   ctx.beginPath();
-  ctx.ellipse(px, cy + 6.5, 12, 5, 0, 0, Math.PI * 2);
+  ctx.ellipse(px, cy + 6.5, 12 * shadowScale, 5 * shadowScale, 0, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.strokeStyle = peaceful ? '#2dd4bf' : '#ef4444';
@@ -1926,7 +2265,7 @@ function drawBarbarianMiniature(
   if (barbSprite) {
     const targetH = 38;
     const drawW = targetH * (barbSprite.width / barbSprite.height);
-    const drawY = cy + 8 - targetH;
+    const drawY = cy + 8 - targetH - strideLift;
     ctx.drawImage(barbSprite.canvas, px - drawW / 2, drawY, drawW, targetH);
     topY = drawY - 5;
   } else {
@@ -1939,5 +2278,340 @@ function drawBarbarianMiniature(
     ctx.fillStyle = '#ef4444';
     ctx.fillRect(px - 10, topY, 20 * (hp / maxHp), 3);
   }
+  ctx.restore();
+}
+
+function drawNaturalDisasterFx(
+  ctx: CanvasRenderingContext2D,
+  dis: NaturalDisasterVfx,
+  tx: number,
+  ty: number,
+  p: number
+) {
+  ctx.save();
+  const fade = p < 0.8 ? 1 : (1 - p) / 0.2;
+
+  if (dis.kind === 'meteor_strike') {
+    if (p < 0.36) {
+      const f = p / 0.36;
+      const sx = tx - 135 * (1 - f);
+      const sy = ty - 210 * (1 - f);
+      const tailGrad = ctx.createLinearGradient(sx - 60, sy - 90, sx, sy);
+      tailGrad.addColorStop(0, 'rgba(192, 132, 252, 0)');
+      tailGrad.addColorStop(0.6, 'rgba(249, 115, 22, 0.75)');
+      tailGrad.addColorStop(1, 'rgba(254, 240, 138, 0.98)');
+      ctx.strokeStyle = tailGrad;
+      ctx.lineWidth = 9;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(sx - 55, sy - 85);
+      ctx.lineTo(sx, sy);
+      ctx.stroke();
+
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 9, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const imp = (p - 0.36) / 0.64;
+      const ease = 1 - Math.pow(1 - imp, 3);
+      const glow = ctx.createRadialGradient(tx, ty, 4, tx, ty, 64 * ease);
+      glow.addColorStop(0, `rgba(254, 240, 138, ${0.85 * fade})`);
+      glow.addColorStop(0.45, `rgba(192, 132, 252, ${0.55 * fade})`);
+      glow.addColorStop(1, 'rgba(192, 132, 252, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(tx, ty, 64 * ease, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(251, 191, 36, ${(1 - imp) * 0.95})`;
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.ellipse(tx, ty + 2, 58 * ease, 34 * ease, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  } else if (dis.kind === 'volcano_eruption') {
+    const pulse = 0.65 + 0.35 * Math.sin(p * Math.PI * 6);
+    const lavaGlow = ctx.createRadialGradient(tx, ty - 6, 4, tx, ty - 6, 54);
+    lavaGlow.addColorStop(0, `rgba(254, 215, 170, ${0.9 * fade * pulse})`);
+    lavaGlow.addColorStop(0.5, `rgba(234, 88, 12, ${0.65 * fade})`);
+    lavaGlow.addColorStop(1, 'rgba(234, 88, 12, 0)');
+    ctx.fillStyle = lavaGlow;
+    ctx.beginPath();
+    ctx.arc(tx, ty - 6, 54, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rising ash cloud & lava fountain arcs
+    for (let i = 0; i < 5; i++) {
+      const ang = -Math.PI * 0.8 + i * 0.32;
+      const reach = 38 * Math.sin(p * Math.PI);
+      const ex = tx + Math.cos(ang) * reach;
+      const ey = ty - 18 - Math.abs(Math.sin(ang)) * reach * 1.25;
+      ctx.fillStyle = `rgba(251, 146, 60, ${0.85 * fade})`;
+      ctx.beginPath();
+      ctx.arc(ex, ey, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (dis.kind === 'river_flood') {
+    for (let ring = 0; ring < 3; ring++) {
+      const rp = ((p * 1.6 + ring * 0.28) % 1);
+      ctx.strokeStyle = `rgba(56, 189, 248, ${(1 - rp) * 0.85 * fade})`;
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.ellipse(tx, ty + 2, 16 + rp * 48, 10 + rp * 28, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  } else {
+    // Shore anomaly bioluminescent pulse + lightning flash
+    const glow = ctx.createRadialGradient(tx, ty, 3, tx, ty, 48);
+    glow.addColorStop(0, `rgba(103, 232, 249, ${0.85 * fade})`);
+    glow.addColorStop(0.6, `rgba(250, 204, 21, ${0.45 * fade})`);
+    glow.addColorStop(1, 'rgba(56, 189, 248, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(tx, ty, 48, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Floating phenomenon banner above the tile
+  const floatY = ty - 34 - p * 18;
+  ctx.font = '800 12px "Plus Jakarta Sans", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.strokeStyle = `rgba(9, 13, 22, ${fade})`;
+  ctx.lineWidth = 4;
+  ctx.strokeText(`✦ ${dis.title}`, tx, floatY);
+  ctx.fillStyle = `rgba(253, 224, 71, ${fade})`;
+  ctx.fillText(`✦ ${dis.title}`, tx, floatY);
+
+  if (dis.damageDealt && dis.damageDealt > 0) {
+    ctx.font = '700 11px "JetBrains Mono", monospace';
+    ctx.strokeText(`⚠ -${dis.damageDealt} HP`, tx, floatY - 16);
+    ctx.fillStyle = `rgba(252, 165, 165, ${fade})`;
+    ctx.fillText(`⚠ -${dis.damageDealt} HP`, tx, floatY - 16);
+  }
+
+  ctx.restore();
+}
+
+function drawTypedShorelineTransition(
+  ctx: CanvasRenderingContext2D,
+  tile: HexTile,
+  pA: { x: number; y: number },
+  pB: { x: number; y: number },
+  px: number,
+  py: number,
+  edgeIdx: number,
+  shore: ShorelineType,
+  isIso: boolean,
+  yScale: number
+) {
+  ctx.save();
+  const mx = (pA.x + pB.x) * 0.5;
+  const my = (pA.y + pB.y) * 0.5;
+  // Vector pointing inward from the water edge toward the land tile center
+  const inX = px - mx;
+  const inY = py - my;
+  // Vector pointing outward from the land edge into the coastal water
+  const outX = -inX;
+  const outY = -inY;
+  const isFrontEdge = isIso && (edgeIdx === 0 || edgeIdx === 1 || edgeIdx === 2);
+
+  if (shore === 'sandy_beach' || shore === 'coral_reef') {
+    // 1. Wide golden-cream sandy beach wedge sloping inward onto the land rim
+    const sandInA = { x: pA.x + inX * 0.34, y: pA.y + inY * 0.34 };
+    const sandInB = { x: pB.x + inX * 0.34, y: pB.y + inY * 0.34 };
+    const sandGrad = ctx.createLinearGradient(mx, my, mx + inX * 0.34, my + inY * 0.34);
+    sandGrad.addColorStop(
+      0,
+      shore === 'coral_reef' ? 'rgba(254, 249, 224, 0.92)' : 'rgba(238, 210, 148, 0.92)'
+    );
+    sandGrad.addColorStop(0.65, 'rgba(224, 194, 128, 0.45)');
+    sandGrad.addColorStop(1, 'rgba(224, 194, 128, 0)');
+    ctx.fillStyle = sandGrad;
+    ctx.beginPath();
+    ctx.moveTo(pA.x, pA.y);
+    ctx.lineTo(pB.x, pB.y);
+    ctx.lineTo(sandInB.x, sandInB.y);
+    ctx.lineTo(sandInA.x, sandInA.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // 2. Gentle white foaming surf lines on the water side
+    ctx.strokeStyle = 'rgba(240, 253, 250, 0.78)';
+    ctx.lineWidth = 3.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pA.x + outX * 0.06, pA.y + outY * 0.06);
+    ctx.quadraticCurveTo(
+      mx + outX * 0.12,
+      my + outY * 0.12,
+      pB.x + outX * 0.06,
+      pB.y + outY * 0.06
+    );
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(165, 243, 252, 0.48)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(pA.x + outX * 0.16, pA.y + outY * 0.16);
+    ctx.quadraticCurveTo(
+      mx + outX * 0.22,
+      my + outY * 0.22,
+      pB.x + outX * 0.16,
+      pB.y + outY * 0.16
+    );
+    ctx.stroke();
+
+    // 3. Coral Reef colorful submerged coral heads in the shallows
+    if (shore === 'coral_reef') {
+      const coralColors = ['#f472b6', '#fbbf24', '#c084fc', '#2dd4bf'];
+      for (let c = 0; c < 4; c++) {
+        const t = 0.2 + c * 0.2;
+        const cx = pA.x + (pB.x - pA.x) * t + outX * (0.18 + (c % 2) * 0.1);
+        const cy = pA.y + (pB.y - pA.y) * t + outY * (0.18 + (c % 2) * 0.1);
+        ctx.fillStyle = coralColors[(tile.q + tile.r + c) % coralColors.length];
+        ctx.globalAlpha = 0.72;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, 3.6, 2.2 * yScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+  } else if (shore === 'high_cliffs') {
+    // Towering sheer layered stone sea cliffs plunging into white-water breakers
+    const cliffDepth = isFrontEdge ? 9.5 : 4.8;
+    const rockDark = tile.temperature === 'arid' ? '#7c3f1c' : '#334155';
+    const rockMid = tile.temperature === 'arid' ? '#b45309' : '#64748b';
+    const rockLit = tile.temperature === 'arid' ? '#d97706' : '#cbd5e1';
+
+    ctx.fillStyle = rockDark;
+    ctx.beginPath();
+    ctx.moveTo(pA.x, pA.y);
+    ctx.lineTo(pB.x, pB.y);
+    ctx.lineTo(pB.x, pB.y + cliffDepth);
+    ctx.lineTo(pA.x, pA.y + cliffDepth);
+    ctx.closePath();
+    ctx.fill();
+
+    // Vertical cliff strata facets
+    for (let s = 0; s < 3; s++) {
+      const t0 = s * 0.33;
+      const t1 = t0 + 0.22;
+      const x0 = pA.x + (pB.x - pA.x) * t0;
+      const y0 = pA.y + (pB.y - pA.y) * t0;
+      const x1 = pA.x + (pB.x - pA.x) * t1;
+      const y1 = pA.y + (pB.y - pA.y) * t1;
+      ctx.fillStyle = s % 2 === 0 ? rockMid : rockLit;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.lineTo(x1, y1 + cliffDepth * 0.85);
+      ctx.lineTo(x0, y0 + cliffDepth * 0.85);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Heavy crashing white surf at the base of the cliff
+    ctx.strokeStyle = 'rgba(241, 245, 249, 0.88)';
+    ctx.lineWidth = 4.0;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pA.x, pA.y + cliffDepth);
+    ctx.lineTo(pB.x, pB.y + cliffDepth);
+    ctx.stroke();
+  } else if (shore === 'rocky_shore') {
+    // Rugged coastal granite boulders, sea stacks, and foaming spray
+    ctx.strokeStyle = 'rgba(226, 232, 240, 0.72)';
+    ctx.lineWidth = 3.8;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pA.x, pA.y);
+    ctx.lineTo(pB.x, pB.y);
+    ctx.stroke();
+
+    for (let b = 0; b < 4; b++) {
+      const t = 0.16 + b * 0.22;
+      const bx = pA.x + (pB.x - pA.x) * t + (b % 2 === 0 ? inX : outX) * 0.06;
+      const by = pA.y + (pB.y - pA.y) * t + (b % 2 === 0 ? inY : outY) * 0.06;
+      const rx = 4.2 + (b % 2) * 1.4;
+      const ry = (3.0 + (b % 2) * 1.0) * yScale;
+      ctx.fillStyle = '#475569';
+      ctx.beginPath();
+      ctx.ellipse(bx, by + 1, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath();
+      ctx.ellipse(bx - 0.8, by - 0.6, rx * 0.65, ry * 0.65, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (shore === 'coastal_swamp') {
+    // Muddy-emerald marsh wedge, braided tidal creek channels, and reed tussocks
+    const swampInA = { x: pA.x + inX * 0.38, y: pA.y + inY * 0.38 };
+    const swampInB = { x: pB.x + inX * 0.38, y: pB.y + inY * 0.38 };
+    const swampGrad = ctx.createLinearGradient(mx, my, mx + inX * 0.38, my + inY * 0.38);
+    swampGrad.addColorStop(0, 'rgba(20, 83, 45, 0.78)');
+    swampGrad.addColorStop(0.6, 'rgba(54, 83, 20, 0.42)');
+    swampGrad.addColorStop(1, 'rgba(54, 83, 20, 0)');
+    ctx.fillStyle = swampGrad;
+    ctx.beginPath();
+    ctx.moveTo(pA.x, pA.y);
+    ctx.lineTo(pB.x, pB.y);
+    ctx.lineTo(swampInB.x, swampInB.y);
+    ctx.lineTo(swampInA.x, swampInA.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Tidal marsh channel & reed clumps
+    ctx.strokeStyle = 'rgba(20, 184, 166, 0.55)';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(mx + outX * 0.12, my + outY * 0.12);
+    ctx.quadraticCurveTo(mx + inX * 0.15 + 3, my + inY * 0.15, mx + inX * 0.32, my + inY * 0.32);
+    ctx.stroke();
+
+    for (let r = 0; r < 4; r++) {
+      const t = 0.18 + r * 0.21;
+      const rx = pA.x + (pB.x - pA.x) * t + inX * (0.08 + (r % 2) * 0.1);
+      const ry = pA.y + (pB.y - pA.y) * t + inY * (0.08 + (r % 2) * 0.1);
+      ctx.fillStyle = r % 2 === 0 ? '#15803d' : '#3f6212';
+      ctx.beginPath();
+      ctx.ellipse(rx, ry, 4.0, 2.5 * yScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (shore === 'icy_shore') {
+    // Jagged snow-white sea-ice shelf & floating pack-ice floes
+    const iceInA = { x: pA.x + inX * 0.28, y: pA.y + inY * 0.28 };
+    const iceInB = { x: pB.x + inX * 0.28, y: pB.y + inY * 0.28 };
+    const iceGrad = ctx.createLinearGradient(mx, my, mx + inX * 0.28, my + inY * 0.28);
+    iceGrad.addColorStop(0, 'rgba(241, 245, 249, 0.92)');
+    iceGrad.addColorStop(1, 'rgba(226, 232, 240, 0)');
+    ctx.fillStyle = iceGrad;
+    ctx.beginPath();
+    ctx.moveTo(pA.x, pA.y);
+    ctx.lineTo(pB.x, pB.y);
+    ctx.lineTo(iceInB.x, iceInB.y);
+    ctx.lineTo(iceInA.x, iceInA.y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = '#e0f2fe';
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.moveTo(pA.x, pA.y);
+    ctx.lineTo(pB.x, pB.y);
+    ctx.stroke();
+
+    // Floating pack ice floes just offshore
+    for (let f = 0; f < 2; f++) {
+      const t = 0.3 + f * 0.4;
+      const fx = pA.x + (pB.x - pA.x) * t + outX * 0.2;
+      const fy = pA.y + (pB.y - pA.y) * t + outY * 0.2;
+      ctx.fillStyle = 'rgba(241, 245, 249, 0.85)';
+      ctx.beginPath();
+      ctx.ellipse(fx, fy, 4.5, 2.5 * yScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   ctx.restore();
 }

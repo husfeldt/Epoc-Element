@@ -49,6 +49,12 @@ export function computeDiscoveryModifiers(state: GameState, civId: string): Disc
       }
     }
   }
+  if (civ.unlockedInventions.includes('pictographic_writing')) {
+    buildingsBonus += 0.1;
+  }
+  if (civ.unlockedInventions.includes('algebraic_equations')) {
+    buildingsBonus += 0.15;
+  }
 
   const citiesBonus = Math.min(0.45, Math.max(0, (citiesCount - 1) * 0.08));
   const populationBonus = Math.min(0.5, totalPop * 0.015);
@@ -155,7 +161,9 @@ export function processCivResearchTurn(
     });
     const totalWeight = weights.reduce((s, item) => s + item.w, 0);
 
-    const effectiveRp = researchPerTurn * (0.75 + modifiers.totalMultiplier * 0.35) * pacingFactor;
+    const literacyMult = civ.unlockedInventions.includes('literacy_reading') ? 1.12 : 1.0;
+    const effectiveRp =
+      researchPerTurn * (0.75 + modifiers.totalMultiplier * 0.35) * pacingFactor * literacyMult;
     for (const { node, w } of weights) {
       const share = (w / totalWeight) * effectiveRp;
       const pctGain = (share / node.baseDifficulty) * 100;

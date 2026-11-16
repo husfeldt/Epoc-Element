@@ -187,7 +187,7 @@ const DomainIllustration: React.FC<{ domain: CoreDomain; color: string }> = ({
 }) => {
   return (
     <div
-      className="w-full h-16 rounded-lg border border-white/10 flex items-center justify-between px-3 overflow-hidden relative"
+      className="w-full h-20 rounded-lg border border-white/10 flex items-center justify-between px-3.5 overflow-hidden relative"
       style={{ backgroundColor: DOMAIN_META[domain].bgTint }}
     >
       <div className="z-10">
@@ -198,7 +198,7 @@ const DomainIllustration: React.FC<{ domain: CoreDomain; color: string }> = ({
           {DOMAIN_META[domain].label}
         </div>
       </div>
-      <svg viewBox="0 0 220 90" className="w-36 h-full opacity-90 shrink-0">
+      <svg viewBox="0 0 220 90" className="w-44 h-full opacity-95 shrink-0">
         {domain === 'matter' && (
           <g stroke={color} strokeWidth="2" fill="none">
             <circle cx="65" cy="45" r="20" strokeOpacity="0.4" />
@@ -264,24 +264,41 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
   const pacingFactor = getPacingResearchFactor(state.config.pacing);
 
   const coreLayout = useMemo(() => {
-    const colW = 252;
-    const rowH = 104;
-    const topOffset = 54;
-    const domainBaseRow: Record<CoreDomain, number> = {
-      matter: 0,
-      physics: 3.3,
-      energy: 5.6,
-      life: 7.5,
-      cosmos: 9.2,
+    const colW = 304;
+    const rowH = 204;
+    const topOffset = 58;
+
+    const bucketCounts: Record<string, number> = {};
+    const maxRowsByDomain: Record<CoreDomain, number> = {
+      matter: 1,
+      physics: 1,
+      energy: 1,
+      life: 1,
+      cosmos: 1,
     };
 
-    const domainRowSpan: Record<CoreDomain, { startY: number; height: number }> = {
-      matter: { startY: topOffset - 10, height: 3.2 * rowH },
-      physics: { startY: topOffset + 3.2 * rowH, height: 2.3 * rowH },
-      energy: { startY: topOffset + 5.5 * rowH, height: 1.9 * rowH },
-      life: { startY: topOffset + 7.4 * rowH, height: 1.7 * rowH },
-      cosmos: { startY: topOffset + 9.1 * rowH, height: 2.2 * rowH },
-    };
+    for (const node of CORE_KNOWLEDGE_NODES) {
+      const k = `${node.domain}_${node.tier}`;
+      bucketCounts[k] = (bucketCounts[k] ?? 0) + 1;
+      if (bucketCounts[k] > maxRowsByDomain[node.domain]) {
+        maxRowsByDomain[node.domain] = bucketCounts[k];
+      }
+    }
+
+    const domainBaseRow = {} as Record<CoreDomain, number>;
+    const domainRowSpan = {} as Record<CoreDomain, { startY: number; height: number }>;
+    let cursorRow = 0;
+
+    for (const dom of DOMAIN_ORDER) {
+      const rowsNeeded = maxRowsByDomain[dom];
+      domainBaseRow[dom] = cursorRow;
+      const spanRows = rowsNeeded * 1.02 + 0.16;
+      domainRowSpan[dom] = {
+        startY: topOffset + cursorRow * rowH - 12,
+        height: spanRows * rowH - 6,
+      };
+      cursorRow += spanRows;
+    }
 
     const tierBucketCount: Record<string, number> = {};
     const positions: Record<string, { x: number; y: number }> = {};
@@ -293,7 +310,7 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
 
       positions[node.id] = {
         x: 32 + node.tier * colW,
-        y: topOffset + (domainBaseRow[node.domain] + idx * 1.04) * rowH,
+        y: topOffset + (domainBaseRow[node.domain] + idx * 1.02) * rowH,
       };
     }
     return {
@@ -301,8 +318,8 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
       colW,
       topOffset,
       domainRowSpan,
-      width: 6 * colW + 48,
-      height: 11.4 * rowH + topOffset,
+      width: 6 * colW + 56,
+      height: (cursorRow + 0.25) * rowH + topOffset,
     };
   }, []);
 
@@ -317,8 +334,8 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
   const currentAge = AGES[civ.ageIndex];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-      <div className="w-full max-w-6xl h-[88vh] bg-[#0f172a] border border-white/15 rounded-xl shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3">
+      <div className="w-full max-w-[96vw] 2xl:max-w-[1680px] h-[92vh] bg-[#0f172a] border border-white/15 rounded-xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-[#131e36]">
           <div>
@@ -423,11 +440,11 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                   {TIER_LABELS.map((label, tIdx) => (
                     <div
                       key={label}
-                      style={{ left: 32 + tIdx * coreLayout.colW, top: 12, width: 222 }}
-                      className="absolute px-2.5 py-1 rounded bg-slate-900/80 border border-white/10 text-[10px] font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between"
+                      style={{ left: 32 + tIdx * coreLayout.colW, top: 12, width: 268 }}
+                      className="absolute px-3 py-1.5 rounded bg-slate-900/85 border border-white/10 text-[10px] font-semibold uppercase tracking-wider text-slate-300 flex items-center justify-between"
                     >
                       <span>{label}</span>
-                      <span className="text-slate-500 font-mono-tabular">T{tIdx + 1}</span>
+                      <span className="text-slate-400 font-mono-tabular">T{tIdx + 1}</span>
                     </div>
                   ))}
 
@@ -471,10 +488,10 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                           civ.unlockedCore.includes(depId) && civ.unlockedCore.includes(node.id);
                         const depUnlocked = civ.unlockedCore.includes(depId);
                         const highlighted = selectedNodeId === node.id || selectedNodeId === depId;
-                        const x1 = from.x + 222;
-                        const y1 = from.y + 42;
+                        const x1 = from.x + 268;
+                        const y1 = from.y + 88;
                         const x2 = to.x;
-                        const y2 = to.y + 42;
+                        const y2 = to.y + 88;
                         const cx = (x1 + x2) / 2;
 
                         return (
@@ -530,13 +547,13 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                                 ? 'rgba(253, 224, 71, 0.45)'
                                 : eligible
                                   ? 'rgba(184, 151, 88, 0.45)'
-                                  : 'rgba(148, 163, 184, 0.14)',
-                          backgroundColor: unlocked ? meta.bgTint : 'rgba(12, 24, 34, 0.94)',
+                                  : 'rgba(148, 163, 184, 0.16)',
+                          backgroundColor: unlocked ? meta.bgTint : 'rgba(12, 24, 34, 0.96)',
                         }}
-                        className={`absolute w-[222px] text-left p-2.5 rounded-lg border transition-all cursor-pointer flex items-center gap-2.5 shadow-md ${
+                        className={`absolute w-[268px] text-left p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col gap-2 shadow-lg ${
                           isSelected
                             ? 'ring-2 ring-amber-300/60 scale-[1.02] z-10'
-                            : 'hover:border-white/35'
+                            : 'hover:border-white/40'
                         }`}
                       >
                         <CoreNodeThumb
@@ -544,14 +561,15 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                           domain={node.domain}
                           color={meta.color}
                           unlocked={unlocked}
+                          variant="banner"
                         />
-                        <div className="flex-1 min-w-0">
+                        <div className="w-full min-w-0 px-0.5">
                           <div className="flex items-center justify-between gap-1">
                             <span
-                              className="text-[10px] font-medium uppercase tracking-wider truncate"
+                              className="text-[10px] font-semibold uppercase tracking-wider truncate"
                               style={{ color: meta.color }}
                             >
-                              {node.domain}
+                              {node.domain} · Tier {node.tier + 1}
                             </span>
                             <span
                               className={`text-[10px] font-mono-tabular ${
@@ -565,7 +583,7 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                               {unlocked ? '✓ Known' : eligible ? `${progress}%` : 'Locked'}
                             </span>
                           </div>
-                          <div className="text-xs font-semibold text-slate-100 mt-0.5 truncate">
+                          <div className="text-sm font-bold text-slate-100 mt-0.5 truncate">
                             {node.name}
                           </div>
                           {eligible ? (
@@ -576,10 +594,9 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                               />
                             </div>
                           ) : (
-                            <div className="text-[10px] text-slate-400 mt-1 truncate">
-                              {enabledInvCount}{' '}
-                              {enabledInvCount === 1 ? 'invention' : 'inventions'} · Tier{' '}
-                              {node.tier + 1}
+                            <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+                              Enables {enabledInvCount}{' '}
+                              {enabledInvCount === 1 ? 'invention' : 'inventions'}
                             </div>
                           )}
                         </div>
@@ -591,15 +608,16 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
 
               {/* Right Inspector with Oil-Painted Artwork Plate & Domain Diagram */}
               {selectedCore && (
-                <div className="w-96 border-l border-[#b89758]/25 bg-[#0e1a28] p-5 flex flex-col gap-4 overflow-y-auto shrink-0">
+                <div className="w-[440px] xl:w-[490px] border-l border-[#b89758]/25 bg-[#0e1a28] p-5 flex flex-col gap-4 overflow-y-auto shrink-0">
                   <div>
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-3">
                         <CoreNodeThumb
                           nodeId={selectedCore.id}
                           domain={selectedCore.domain}
                           color={DOMAIN_META[selectedCore.domain].color}
                           unlocked={civ.unlockedCore.includes(selectedCore.id)}
+                          variant="lg"
                         />
                         <div>
                           <div
@@ -815,6 +833,7 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                           invId={inv.id}
                           category={inv.category}
                           unlocked={unlocked}
+                          primaryCoreId={inv.requiredCore[0]}
                         />
 
                         <div className="flex items-start gap-2.5">
