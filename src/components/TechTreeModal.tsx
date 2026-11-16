@@ -46,6 +46,7 @@ import {
 import { getCivEconomySummary } from '../engine/turnEngine';
 import { CoreDomain, GameState } from '../types/game';
 import {
+  CoreKnowledgeArtworkCard,
   CoreNodeThumb,
   DramaticScenePlate,
   InventionBannerIllustration,
@@ -58,6 +59,14 @@ interface TechTreeModalProps {
 }
 
 const DOMAIN_ORDER: CoreDomain[] = ['matter', 'physics', 'energy', 'life', 'cosmos'];
+const TIER_LABELS = [
+  'Tier I · Foundational',
+  'Tier II · Early Empirical',
+  'Tier III · Classical & Alloy',
+  'Tier IV · Experimental',
+  'Tier V · Industrial Field',
+  'Tier VI · Solid-State',
+];
 
 function getCoreIcon(nodeId: string, domain: CoreDomain) {
   switch (nodeId) {
@@ -178,10 +187,18 @@ const DomainIllustration: React.FC<{ domain: CoreDomain; color: string }> = ({
 }) => {
   return (
     <div
-      className="w-full h-24 rounded-lg border border-white/10 flex items-center justify-center overflow-hidden relative"
+      className="w-full h-16 rounded-lg border border-white/10 flex items-center justify-between px-3 overflow-hidden relative"
       style={{ backgroundColor: DOMAIN_META[domain].bgTint }}
     >
-      <svg viewBox="0 0 220 90" className="w-full h-full opacity-90">
+      <div className="z-10">
+        <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+          Domain Schematic
+        </div>
+        <div className="text-xs font-semibold text-slate-100 mt-0.5">
+          {DOMAIN_META[domain].label}
+        </div>
+      </div>
+      <svg viewBox="0 0 220 90" className="w-36 h-full opacity-90 shrink-0">
         {domain === 'matter' && (
           <g stroke={color} strokeWidth="2" fill="none">
             <circle cx="65" cy="45" r="20" strokeOpacity="0.4" />
@@ -247,14 +264,23 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
   const pacingFactor = getPacingResearchFactor(state.config.pacing);
 
   const coreLayout = useMemo(() => {
-    const colW = 246;
+    const colW = 252;
     const rowH = 104;
+    const topOffset = 54;
     const domainBaseRow: Record<CoreDomain, number> = {
       matter: 0,
-      physics: 3.2,
-      energy: 5.5,
-      life: 7.4,
-      cosmos: 9.1,
+      physics: 3.3,
+      energy: 5.6,
+      life: 7.5,
+      cosmos: 9.2,
+    };
+
+    const domainRowSpan: Record<CoreDomain, { startY: number; height: number }> = {
+      matter: { startY: topOffset - 10, height: 3.2 * rowH },
+      physics: { startY: topOffset + 3.2 * rowH, height: 2.3 * rowH },
+      energy: { startY: topOffset + 5.5 * rowH, height: 1.9 * rowH },
+      life: { startY: topOffset + 7.4 * rowH, height: 1.7 * rowH },
+      cosmos: { startY: topOffset + 9.1 * rowH, height: 2.2 * rowH },
     };
 
     const tierBucketCount: Record<string, number> = {};
@@ -267,13 +293,27 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
 
       positions[node.id] = {
         x: 32 + node.tier * colW,
-        y: 28 + (domainBaseRow[node.domain] + idx * 1.06) * rowH,
+        y: topOffset + (domainBaseRow[node.domain] + idx * 1.04) * rowH,
       };
     }
-    return { positions, width: 6 * colW + 40, height: 11 * rowH };
+    return {
+      positions,
+      colW,
+      topOffset,
+      domainRowSpan,
+      width: 6 * colW + 48,
+      height: 11.4 * rowH + topOffset,
+    };
   }, []);
 
   const selectedCore = CORE_KNOWLEDGE_NODES.find((n) => n.id === selectedNodeId);
+  const unlocksCore = useMemo(
+    () =>
+      selectedCore
+        ? CORE_KNOWLEDGE_NODES.filter((n) => n.dependencies.includes(selectedCore.id))
+        : [],
+    [selectedCore]
+  );
   const currentAge = AGES[civ.ageIndex];
 
   return (
@@ -379,6 +419,43 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                   className="relative"
                   style={{ width: coreLayout.width, height: coreLayout.height }}
                 >
+                  {/* Tier Column Headers */}
+                  {TIER_LABELS.map((label, tIdx) => (
+                    <div
+                      key={label}
+                      style={{ left: 32 + tIdx * coreLayout.colW, top: 12, width: 222 }}
+                      className="absolute px-2.5 py-1 rounded bg-slate-900/80 border border-white/10 text-[10px] font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between"
+                    >
+                      <span>{label}</span>
+                      <span className="text-slate-500 font-mono-tabular">T{tIdx + 1}</span>
+                    </div>
+                  ))}
+
+                  {/* Domain Swimlane Bands */}
+                  {DOMAIN_ORDER.map((dom) => {
+                    const span = coreLayout.domainRowSpan[dom];
+                    const meta = DOMAIN_META[dom];
+                    return (
+                      <div
+                        key={`band_${dom}`}
+                        style={{
+                          top: span.startY,
+                          height: span.height,
+                          borderColor: `${meta.color}22`,
+                          background: `linear-gradient(90deg, ${meta.bgTint} 0%, rgba(9,15,29,0) 45%)`,
+                        }}
+                        className="absolute inset-x-3 rounded-xl border pointer-events-none"
+                      >
+                        <div
+                          className="px-3 py-1 text-[10px] font-bold uppercase tracking-widest opacity-60"
+                          style={{ color: meta.color }}
+                        >
+                          {meta.label}
+                        </div>
+                      </div>
+                    );
+                  })}
+
                   {/* Physical Dependency Branch Lines */}
                   <svg
                     className="absolute inset-0 pointer-events-none"
@@ -393,10 +470,11 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                         const bothUnlocked =
                           civ.unlockedCore.includes(depId) && civ.unlockedCore.includes(node.id);
                         const depUnlocked = civ.unlockedCore.includes(depId);
-                        const x1 = from.x + 214;
-                        const y1 = from.y + 40;
+                        const highlighted = selectedNodeId === node.id || selectedNodeId === depId;
+                        const x1 = from.x + 222;
+                        const y1 = from.y + 42;
                         const x2 = to.x;
-                        const y2 = to.y + 40;
+                        const y2 = to.y + 42;
                         const cx = (x1 + x2) / 2;
 
                         return (
@@ -405,14 +483,16 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                             d={`M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`}
                             fill="none"
                             stroke={
-                              bothUnlocked
-                                ? DOMAIN_META[node.domain].color
-                                : depUnlocked
-                                  ? 'rgba(148, 163, 184, 0.55)'
-                                  : 'rgba(148, 163, 184, 0.16)'
+                              highlighted
+                                ? '#fde047'
+                                : bothUnlocked
+                                  ? DOMAIN_META[node.domain].color
+                                  : depUnlocked
+                                    ? 'rgba(148, 163, 184, 0.55)'
+                                    : 'rgba(148, 163, 184, 0.16)'
                             }
-                            strokeWidth={bothUnlocked ? 2.5 : 1.5}
-                            strokeDasharray={depUnlocked ? undefined : '4 4'}
+                            strokeWidth={highlighted ? 3 : bothUnlocked ? 2.5 : 1.5}
+                            strokeDasharray={depUnlocked || highlighted ? undefined : '4 4'}
                           />
                         );
                       })
@@ -428,6 +508,12 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                       !unlocked && node.dependencies.every((d) => civ.unlockedCore.includes(d));
                     const progress = Math.min(100, Math.round(civ.coreProgress[node.id] ?? 0));
                     const isSelected = selectedNodeId === node.id;
+                    const isRelated =
+                      selectedCore?.dependencies.includes(node.id) ||
+                      node.dependencies.includes(selectedNodeId);
+                    const enabledInvCount = INVENTIONS.filter((inv) =>
+                      inv.requiredCore.includes(node.id)
+                    ).length;
 
                     return (
                       <button
@@ -436,16 +522,22 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                         style={{
                           left: pos.x,
                           top: pos.y,
-                          borderColor: unlocked
-                            ? meta.color
-                            : isSelected
-                              ? '#e6c983'
-                              : eligible
-                                ? 'rgba(184, 151, 88, 0.45)'
-                                : 'rgba(148, 163, 184, 0.14)',
+                          borderColor: isSelected
+                            ? '#fde047'
+                            : unlocked
+                              ? meta.color
+                              : isRelated
+                                ? 'rgba(253, 224, 71, 0.45)'
+                                : eligible
+                                  ? 'rgba(184, 151, 88, 0.45)'
+                                  : 'rgba(148, 163, 184, 0.14)',
                           backgroundColor: unlocked ? meta.bgTint : 'rgba(12, 24, 34, 0.94)',
                         }}
-                        className="absolute w-[214px] text-left p-2.5 rounded-lg border transition-colors cursor-pointer flex items-center gap-2.5 shadow-md"
+                        className={`absolute w-[222px] text-left p-2.5 rounded-lg border transition-all cursor-pointer flex items-center gap-2.5 shadow-md ${
+                          isSelected
+                            ? 'ring-2 ring-amber-300/60 scale-[1.02] z-10'
+                            : 'hover:border-white/35'
+                        }`}
                       >
                         <CoreNodeThumb
                           nodeId={node.id}
@@ -461,19 +553,33 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                             >
                               {node.domain}
                             </span>
-                            <span className="text-[10px] font-mono-tabular text-slate-300">
-                              {unlocked ? 'Known' : eligible ? `${progress}%` : 'Locked'}
+                            <span
+                              className={`text-[10px] font-mono-tabular ${
+                                unlocked
+                                  ? 'text-emerald-300 font-semibold'
+                                  : eligible
+                                    ? 'text-sky-300 font-semibold'
+                                    : 'text-slate-400'
+                              }`}
+                            >
+                              {unlocked ? '✓ Known' : eligible ? `${progress}%` : 'Locked'}
                             </span>
                           </div>
                           <div className="text-xs font-semibold text-slate-100 mt-0.5 truncate">
                             {node.name}
                           </div>
-                          {eligible && (
-                            <div className="w-full h-1 bg-slate-800 rounded-full mt-1.5 overflow-hidden">
+                          {eligible ? (
+                            <div className="w-full h-1.5 bg-slate-800 rounded-full mt-1.5 overflow-hidden">
                               <div
-                                className="h-full"
+                                className="h-full rounded-full transition-all"
                                 style={{ width: `${progress}%`, backgroundColor: meta.color }}
                               />
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-slate-400 mt-1 truncate">
+                              {enabledInvCount}{' '}
+                              {enabledInvCount === 1 ? 'invention' : 'inventions'} · Tier{' '}
+                              {node.tier + 1}
                             </div>
                           )}
                         </div>
@@ -483,35 +589,32 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                 </div>
               </div>
 
-              {/* Right Inspector with Domain Diagram & Node Plate */}
+              {/* Right Inspector with Oil-Painted Artwork Plate & Domain Diagram */}
               {selectedCore && (
-                <div className="w-80 border-l border-[#b89758]/25 bg-[#0e1a28] p-5 flex flex-col gap-4 overflow-y-auto">
-                  <DomainIllustration
-                    domain={selectedCore.domain}
-                    color={DOMAIN_META[selectedCore.domain].color}
-                  />
-
+                <div className="w-96 border-l border-[#b89758]/25 bg-[#0e1a28] p-5 flex flex-col gap-4 overflow-y-auto shrink-0">
                   <div>
-                    <div className="flex items-center gap-3">
-                      <CoreNodeThumb
-                        nodeId={selectedCore.id}
-                        domain={selectedCore.domain}
-                        color={DOMAIN_META[selectedCore.domain].color}
-                        unlocked={civ.unlockedCore.includes(selectedCore.id)}
-                      />
-                      <div>
-                        <div
-                          className="text-xs font-medium flex items-center gap-1.5"
-                          style={{ color: DOMAIN_META[selectedCore.domain].color }}
-                        >
-                          {React.createElement(getCoreIcon(selectedCore.id, selectedCore.domain), {
-                            className: 'w-3.5 h-3.5',
-                          })}
-                          <span>{DOMAIN_META[selectedCore.domain].label}</span>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <CoreNodeThumb
+                          nodeId={selectedCore.id}
+                          domain={selectedCore.domain}
+                          color={DOMAIN_META[selectedCore.domain].color}
+                          unlocked={civ.unlockedCore.includes(selectedCore.id)}
+                        />
+                        <div>
+                          <div
+                            className="text-xs font-medium flex items-center gap-1.5"
+                            style={{ color: DOMAIN_META[selectedCore.domain].color }}
+                          >
+                            {React.createElement(getCoreIcon(selectedCore.id, selectedCore.domain), {
+                              className: 'w-3.5 h-3.5',
+                            })}
+                            <span>{DOMAIN_META[selectedCore.domain].label}</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-white mt-0.5 font-display leading-snug">
+                            {selectedCore.name}
+                          </h3>
                         </div>
-                        <h3 className="text-lg font-bold text-white mt-0.5 font-display">
-                          {selectedCore.name}
-                        </h3>
                       </div>
                     </div>
                     <p className="text-xs text-slate-300 mt-2.5 leading-relaxed">
@@ -519,32 +622,102 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                     </p>
                   </div>
 
+                  <CoreKnowledgeArtworkCard
+                    nodeId={selectedCore.id}
+                    nodeName={selectedCore.name}
+                    domainLabel={DOMAIN_META[selectedCore.domain].label}
+                    color={DOMAIN_META[selectedCore.domain].color}
+                    unlocked={civ.unlockedCore.includes(selectedCore.id)}
+                    eligible={
+                      !civ.unlockedCore.includes(selectedCore.id) &&
+                      selectedCore.dependencies.every((d) => civ.unlockedCore.includes(d))
+                    }
+                    progress={Math.min(100, Math.round(civ.coreProgress[selectedCore.id] ?? 0))}
+                    tier={selectedCore.tier}
+                  />
+
+                  <div className="space-y-2">
+                    <DomainIllustration
+                      domain={selectedCore.domain}
+                      color={DOMAIN_META[selectedCore.domain].color}
+                    />
+                    {civ.domainFocus !== selectedCore.domain && (
+                      <button
+                        onClick={() => onSelectFocus(selectedCore.domain)}
+                        className="w-full py-1.5 px-3 rounded-lg border text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                        style={{
+                          borderColor: `${DOMAIN_META[selectedCore.domain].color}66`,
+                          backgroundColor: DOMAIN_META[selectedCore.domain].bgTint,
+                          color: '#f8fafc',
+                        }}
+                      >
+                        <Sparkles
+                          className="w-3.5 h-3.5"
+                          style={{ color: DOMAIN_META[selectedCore.domain].color }}
+                        />
+                        <span>Prioritize {DOMAIN_META[selectedCore.domain].label} (2.6x)</span>
+                      </button>
+                    )}
+                  </div>
+
                   <div className="border-t border-white/10 pt-3">
                     <div className="text-xs font-semibold text-slate-400 mb-2">
                       Physical Dependencies
                     </div>
                     {selectedCore.dependencies.length === 0 ? (
-                      <div className="text-xs text-emerald-400">Foundational Observation</div>
+                      <div className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-400/25 rounded-lg px-3 py-2">
+                        Foundational Observation — No prior prerequisites required.
+                      </div>
                     ) : (
                       <ul className="space-y-1.5">
                         {selectedCore.dependencies.map((depId) => {
                           const dep = CORE_KNOWLEDGE_NODES.find((d) => d.id === depId);
                           const has = civ.unlockedCore.includes(depId);
-                          return (
-                            <li
-                              key={depId}
-                              className={`text-xs flex items-center justify-between ${
-                                has ? 'text-emerald-300' : 'text-slate-400'
-                              }`}
-                            >
-                              <span>{dep?.name}</span>
-                              <span>{has ? '✓' : 'Required'}</span>
+                          return dep ? (
+                            <li key={depId}>
+                              <button
+                                onClick={() => setSelectedNodeId(depId)}
+                                className={`w-full text-xs px-2.5 py-1.5 rounded-lg border flex items-center justify-between transition-colors cursor-pointer ${
+                                  has
+                                    ? 'bg-emerald-500/10 border-emerald-400/30 text-emerald-200 hover:bg-emerald-500/20'
+                                    : 'bg-slate-900/70 border-white/10 text-slate-300 hover:border-white/25'
+                                }`}
+                              >
+                                <span className="font-medium">{dep.name}</span>
+                                <span className="text-[11px]">{has ? '✓ Known' : 'Required →'}</span>
+                              </button>
                             </li>
-                          );
+                          ) : null;
                         })}
                       </ul>
                     )}
                   </div>
+
+                  {unlocksCore.length > 0 && (
+                    <div className="border-t border-white/10 pt-3">
+                      <div className="text-xs font-semibold text-slate-400 mb-2">
+                        Leads To Core Knowledge
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {unlocksCore.map((nextNode) => {
+                          const has = civ.unlockedCore.includes(nextNode.id);
+                          return (
+                            <button
+                              key={nextNode.id}
+                              onClick={() => setSelectedNodeId(nextNode.id)}
+                              className={`px-2.5 py-1 rounded-md border text-xs transition-colors cursor-pointer ${
+                                has
+                                  ? 'bg-sky-500/15 border-sky-400/35 text-sky-200'
+                                  : 'bg-slate-900/70 border-white/10 text-slate-300 hover:border-amber-300/40'
+                              }`}
+                            >
+                              {nextNode.name} →
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="border-t border-white/10 pt-3">
                     <div className="text-xs font-semibold text-slate-400 mb-2">
@@ -552,12 +725,24 @@ export const TechTreeModal: React.FC<TechTreeModalProps> = ({
                     </div>
                     <ul className="space-y-1.5">
                       {INVENTIONS.filter((inv) => inv.requiredCore.includes(selectedCore.id)).map(
-                        (inv) => (
-                          <li key={inv.id} className="text-xs text-amber-200/90">
-                            • {inv.name}{' '}
-                            <span className="text-slate-400">({AGES[inv.eraHint].name})</span>
-                          </li>
-                        )
+                        (inv) => {
+                          const hasInv = civ.unlockedInventions.includes(inv.id);
+                          return (
+                            <li
+                              key={inv.id}
+                              className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center justify-between ${
+                                hasInv
+                                  ? 'bg-amber-500/10 border-amber-400/30 text-amber-200'
+                                  : 'bg-slate-900/50 border-white/10 text-amber-200/90'
+                              }`}
+                            >
+                              <span className="font-medium">{inv.name}</span>
+                              <span className="text-[11px] text-slate-400">
+                                {hasInv ? '✓ Discovered' : AGES[inv.eraHint].name}
+                              </span>
+                            </li>
+                          );
+                        }
                       )}
                     </ul>
                   </div>

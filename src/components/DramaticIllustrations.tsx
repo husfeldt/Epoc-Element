@@ -235,17 +235,377 @@ export const CoreNodeThumb: React.FC<{
     }
   };
 
+  const art = CORE_ARTWORK_MAP[nodeId];
+  const cellH = art && art.rows === 2 ? 384 : 256;
+  const vx = art ? art.col * 344 + 8 : 0;
+  const vy = art ? art.row * cellH + 8 : 0;
+  const vh = cellH - 16;
+
   return (
-    <svg viewBox="0 0 48 48" className="w-11 h-11 shrink-0 rounded-lg border border-white/15 bg-[#091220]">
-      <defs>
-        <radialGradient id={`g_${nodeId}_${domain}`} cx="50%" cy="40%" r="60%">
-          <stop offset="0%" stopColor={accent} stopOpacity={unlocked ? 0.28 : 0.14} />
-          <stop offset="100%" stopColor="#070d19" stopOpacity="0.95" />
-        </radialGradient>
-      </defs>
-      <rect width="48" height="48" rx="8" fill={`url(#g_${nodeId}_${domain})`} />
-      {renderMotif()}
-    </svg>
+    <div
+      className="w-11 h-11 shrink-0 rounded-lg border overflow-hidden relative bg-[#091220] shadow-inner"
+      style={{ borderColor: unlocked ? color : 'rgba(255, 255, 255, 0.16)' }}
+    >
+      {art ? (
+        <>
+          <svg
+            viewBox={`${vx} ${vy} 328 ${vh}`}
+            preserveAspectRatio="xMidYMid slice"
+            className={`w-full h-full block transition-all duration-300 ${
+              unlocked ? 'brightness-105 saturate-110' : 'brightness-75 saturate-75'
+            }`}
+          >
+            <image
+              href={CORE_KNOWLEDGE_SHEETS[art.sheet]}
+              width="1376"
+              height="768"
+              preserveAspectRatio="none"
+            />
+          </svg>
+          <div className="absolute bottom-0.5 right-0.5 w-4 h-4 rounded bg-[#070d19]/85 border border-white/20 flex items-center justify-center">
+            <svg viewBox="0 0 48 48" className="w-3.5 h-3.5">
+              {renderMotif()}
+            </svg>
+          </div>
+        </>
+      ) : (
+        <svg viewBox="0 0 48 48" className="w-full h-full">
+          <defs>
+            <radialGradient id={`g_${nodeId}_${domain}`} cx="50%" cy="40%" r="60%">
+              <stop offset="0%" stopColor={accent} stopOpacity={unlocked ? 0.28 : 0.14} />
+              <stop offset="100%" stopColor="#070d19" stopOpacity="0.95" />
+            </radialGradient>
+          </defs>
+          <rect width="48" height="48" rx="8" fill={`url(#g_${nodeId}_${domain})`} />
+          {renderMotif()}
+        </svg>
+      )}
+    </div>
+  );
+};
+
+export const CORE_KNOWLEDGE_SHEETS = {
+  matter: '/src/assets/images/core_matter_sheet_1794847712054.jpg',
+  physics_energy: '/src/assets/images/core_physics_energy_sheet_1794847718732.jpg',
+  life_cosmos: '/src/assets/images/core_life_cosmos_sheet_1794847736669.jpg',
+} as const;
+
+export const CORE_ARTWORK_MAP: Record<
+  string,
+  {
+    sheet: keyof typeof CORE_KNOWLEDGE_SHEETS;
+    col: number;
+    row: number;
+    rows: 2 | 3;
+    caption: string;
+    principle: string;
+  }
+> = {
+  fire_control: {
+    sheet: 'matter',
+    col: 0,
+    row: 0,
+    rows: 3,
+    caption: 'Controlled hearth embers reaching 850°C for thermal reaction',
+    principle: 'Exothermic Oxidation · Rapid O₂ bonding releases sustained radiant heat.',
+  },
+  stone_knapping: {
+    sheet: 'matter',
+    col: 1,
+    row: 0,
+    rows: 3,
+    caption: 'Conchoidal percussion flaking of volcanic obsidian & flint cores',
+    principle: 'Hertzian Cone Fracture · Shockwaves cleave amorphous silica into micron edges.',
+  },
+  clay_ceramics: {
+    sheet: 'matter',
+    col: 2,
+    row: 0,
+    rows: 3,
+    caption: 'Updraft beehive kiln vitrifying terracotta amphorae & crucibles',
+    principle: 'Silicate Sintering · Dehydroxylation fuses clay platelets into waterproof ceramic.',
+  },
+  coal_charcoal: {
+    sheet: 'matter',
+    col: 3,
+    row: 0,
+    rows: 3,
+    caption: 'Bituminous coal seam & slow-pyrolysis charcoal mound kiln',
+    principle: 'Pyrolytic Carbonization · Driving off volatiles concentrates pure reducing carbon.',
+  },
+  copper_smelting: {
+    sheet: 'matter',
+    col: 0,
+    row: 1,
+    rows: 3,
+    caption: 'Malachite carbonate ore reduced to molten copper in a clay crucible',
+    principle: 'Carbothermic Reduction · CO gas strips oxygen from CuCO₃ at 1,085°C.',
+  },
+  tin_alloying: {
+    sheet: 'matter',
+    col: 1,
+    row: 1,
+    rows: 3,
+    caption: 'Casting molten Cu-Sn golden bronze into a carved stone blade mold',
+    principle: 'Substitutional Lattice · Tin atoms lock copper slip planes for superior hardness.',
+  },
+  iron_metallurgy: {
+    sheet: 'matter',
+    col: 2,
+    row: 1,
+    rows: 3,
+    caption: 'Forced-draft bloomery furnace & forging incandescent wrought iron',
+    principle: 'Slag Liquation & Forging · Hammering expels silicate slag from spongy iron bloom.',
+  },
+  basic_chemistry: {
+    sheet: 'matter',
+    col: 3,
+    row: 1,
+    rows: 3,
+    caption: 'Glass alembic distillation of mineral acids, alkalis & crystalline salts',
+    principle: 'Proton Transfer & Vapor Fractionation · Selective boiling isolates pure reagents.',
+  },
+  steel_carbonizing: {
+    sheet: 'matter',
+    col: 0,
+    row: 2,
+    rows: 3,
+    caption: 'Pneumatic converter decarburizing molten pig iron into structural steel',
+    principle: 'Martensitic Phase Control · Controlled 0.2–1.5% carbon forms resilient crystal grains.',
+  },
+  gunpowder_alchemy: {
+    sheet: 'matter',
+    col: 1,
+    row: 2,
+    rows: 3,
+    caption: 'Deflagration of potassium nitrate, charcoal, and crystalline sulfur',
+    principle: 'Rapid Gas Expansion · Solid oxidizer fuels subsonic pressure waves (3,000x volume).',
+  },
+  petrochemicals: {
+    sheet: 'matter',
+    col: 2,
+    row: 2,
+    rows: 3,
+    caption: 'Fractional distillation columns cracking crude oil into light hydrocarbons',
+    principle: 'Chain-Length Boiling Gradient · Separates alkanes, aromatics, and polymer feedstocks.',
+  },
+  lever_pulley: {
+    sheet: 'physics_energy',
+    col: 0,
+    row: 0,
+    rows: 3,
+    caption: 'Compound block-and-tackle crane & fulcrum beam hoisting dressed stone',
+    principle: 'Work-Distance Tradeoff · Torque equilibrium (F₁d₁ = F₂d₂) multiplies lifting force.',
+  },
+  wheel_axle: {
+    sheet: 'physics_energy',
+    col: 1,
+    row: 0,
+    rows: 3,
+    caption: 'Spoked timber wheel, bronze journal bearing & involute gear train',
+    principle: 'Rolling Contact & Gear Ratio · Converts sliding drag into low-loss angular velocity.',
+  },
+  optics_lenses: {
+    sheet: 'physics_energy',
+    col: 2,
+    row: 0,
+    rows: 3,
+    caption: 'Ground crown-glass biconvex lens & dispersive prism on a brass rail',
+    principle: 'Snell’s Law of Refraction · Phase velocity shift bends wavefronts to a focal plane.',
+  },
+  hydraulics_fluid: {
+    sheet: 'physics_energy',
+    col: 3,
+    row: 0,
+    rows: 3,
+    caption: 'Masonry aqueduct driving an overshot waterwheel & Archimedes screw',
+    principle: 'Bernoulli & Hydrostatic Head · Gravitational fluid head converts into shaft torque.',
+  },
+  steam_thermodynamics: {
+    sheet: 'physics_energy',
+    col: 0,
+    row: 1,
+    rows: 3,
+    caption: 'Pressurized fire-tube boiler, Watt linkage & heavy cast-iron flywheel',
+    principle: 'Rankine Phase Expansion · Latent heat of vaporization drives cyclic piston work.',
+  },
+  internal_combustion: {
+    sheet: 'physics_energy',
+    col: 1,
+    row: 1,
+    rows: 3,
+    caption: 'High-compression four-stroke cylinder igniting atomized hydrocarbon mist',
+    principle: 'Otto Adiabatic Cycle · Spark ignition inside the working cylinder maximizes power-to-weight.',
+  },
+  magnetism: {
+    sheet: 'physics_energy',
+    col: 2,
+    row: 1,
+    rows: 3,
+    caption: 'Natural magnetite lodestone aligning iron filings & pivoted compass needle',
+    principle: 'Ferromagnetic Dipoles · Aligned electron spins project a coherent dipolar vector field.',
+  },
+  static_charge: {
+    sheet: 'physics_energy',
+    col: 3,
+    row: 1,
+    rows: 3,
+    caption: 'Friction globe generator discharging high-voltage arcs into a Leyden jar',
+    principle: 'Coulomb Potential & Dielectric Storage · Separated charge accumulates across glass.',
+  },
+  electromagnetism: {
+    sheet: 'physics_energy',
+    col: 0,
+    row: 2,
+    rows: 3,
+    caption: 'Copper armature coil rotating inside permanent horseshoe magnetic poles',
+    principle: 'Faraday-Maxwell Induction · Time-varying magnetic flux (dΦ/dt) induces electromotive force.',
+  },
+  semiconductors: {
+    sheet: 'physics_energy',
+    col: 1,
+    row: 2,
+    rows: 3,
+    caption: 'Photolithographed silicon wafer die with microscopic P-N transistor gates',
+    principle: 'Bandgap Depletion Modulation · Gate voltage controls charge carriers across doped silicon.',
+  },
+  botany_domestication: {
+    sheet: 'life_cosmos',
+    col: 0,
+    row: 0,
+    rows: 2,
+    caption: 'Terraced experimental plots & selective hybridizing of non-shattering grain',
+    principle: 'Artificial Phenotype Selection · Isolating high-yield alleles stabilizes staple crops.',
+  },
+  fermentation_medicine: {
+    sheet: 'life_cosmos',
+    col: 1,
+    row: 0,
+    rows: 2,
+    caption: 'Apothecary herbarium, oak fermentation casks & botanical alkaloid tinctures',
+    principle: 'Anaerobic Zymology & Phytochemistry · Yeast enzymes and plant alkaloids inhibit spoilage.',
+  },
+  anatomy_germ_theory: {
+    sheet: 'life_cosmos',
+    col: 2,
+    row: 0,
+    rows: 2,
+    caption: 'Achromatic brass microscope resolving stained bacterial colonies in agar',
+    principle: 'Pathogenic Contagion · Identifying cellular microbes enables antisepsis and immunization.',
+  },
+  solar_calendar: {
+    sheet: 'life_cosmos',
+    col: 3,
+    row: 0,
+    rows: 2,
+    caption: 'Megalithic solstice sightlines paired with carved ephemeris tablets',
+    principle: 'Ecliptic Periodicity · Reconciles the 365.24-day solar year with synodic lunar months.',
+  },
+  celestial_navigation: {
+    sheet: 'life_cosmos',
+    col: 0,
+    row: 1,
+    rows: 2,
+    caption: 'Mariner’s brass astrolabe, octant & Pelorus chart fixing open-ocean latitude',
+    principle: 'Spherical Trigonometry · Horizon zenith angles of Polaris and the Sun fix coordinates.',
+  },
+  gravitation_orbits: {
+    sheet: 'life_cosmos',
+    col: 1,
+    row: 1,
+    rows: 2,
+    caption: 'Clockwork heliocentric orrery & observatory reflector tracking planetary ellipses',
+    principle: 'Inverse-Square Universal Gravitation · Centripetal attraction (GMm/r²) governs conic orbits.',
+  },
+  atomic_structure: {
+    sheet: 'life_cosmos',
+    col: 2,
+    row: 1,
+    rows: 2,
+    caption: 'Quantized electron shells orbiting a dense nucleon core with alpha tracks',
+    principle: 'Quantum Wavefunctions & Nuclear Binding · Discrete orbital eigenstates & E = mc².',
+  },
+};
+
+export const CoreKnowledgeArtworkCard: React.FC<{
+  nodeId: string;
+  nodeName: string;
+  domainLabel: string;
+  color: string;
+  unlocked: boolean;
+  eligible: boolean;
+  progress: number;
+  tier: number;
+}> = ({ nodeId, domainLabel, color, unlocked, eligible, progress, tier }) => {
+  const art = CORE_ARTWORK_MAP[nodeId];
+  if (!art) return null;
+
+  const cellH = art.rows === 2 ? 384 : 256;
+  const vx = art.col * 344 + 8;
+  const vy = art.row * cellH + 8;
+  const vh = cellH - 16;
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-[#b89758]/45 bg-[#09111d] shadow-xl relative group">
+      <div className="relative w-full h-48 overflow-hidden bg-[#070d18]">
+        <svg
+          viewBox={`${vx} ${vy} 328 ${vh}`}
+          preserveAspectRatio="xMidYMid slice"
+          className={`w-full h-full block transition-transform duration-500 group-hover:scale-105 ${
+            unlocked ? 'brightness-105 saturate-110' : 'brightness-90'
+          }`}
+        >
+          <image
+            href={CORE_KNOWLEDGE_SHEETS[art.sheet]}
+            width="1376"
+            height="768"
+            preserveAspectRatio="none"
+          />
+        </svg>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#09111d] via-[#09111d]/20 to-transparent pointer-events-none" />
+        <div className="absolute inset-1.5 rounded-lg border border-[#e6c983]/25 pointer-events-none" />
+
+        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+          <span
+            className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider backdrop-blur-md border"
+            style={{
+              backgroundColor: 'rgba(9, 17, 29, 0.82)',
+              borderColor: `${color}66`,
+              color,
+            }}
+          >
+            Tier {tier + 1} · {domainLabel}
+          </span>
+        </div>
+
+        <div className="absolute top-2.5 right-2.5">
+          {unlocked ? (
+            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/25 text-emerald-200 border border-emerald-400/50 backdrop-blur-md">
+              ✓ Discovered
+            </span>
+          ) : eligible ? (
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono-tabular font-semibold bg-sky-500/25 text-sky-200 border border-sky-400/50 backdrop-blur-md">
+              Researching · {progress}%
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900/80 text-slate-300 border border-white/15 backdrop-blur-md">
+              Locked Concept
+            </span>
+          )}
+        </div>
+
+        <div className="absolute bottom-2 left-3 right-3">
+          <div className="text-[11px] font-medium text-[#f8f3e6] drop-shadow leading-snug">
+            {art.caption}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-3 py-2 bg-[#0c1626] border-t border-white/10 text-[11px] text-slate-300 leading-relaxed">
+        <span className="font-semibold text-[#e6c983]">Physical Principle: </span>
+        {art.principle}
+      </div>
+    </div>
   );
 };
 
