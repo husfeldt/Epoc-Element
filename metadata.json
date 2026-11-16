@@ -1,0 +1,6 @@
+{
+  "name": "Epoch & Element",
+  "description": "A stylized 2.5D hex-based civilization strategy game featuring emergent Core Knowledge and Invention discovery, blurred fog-of-war exploration, dynamic weather, diplomacy, and conquest.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
