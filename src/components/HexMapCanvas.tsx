@@ -13,13 +13,17 @@ import {
 import {
   SlicedSprite,
   getInfrastructureSprite,
-  getTerrainTileSprite,
   getUnitMiniatureSprite,
-  isBiomeTransitionTile,
-  isOasisCenterTile,
-  resolveTileShoreline,
   spriteAtlas,
 } from '../engine/spriteAtlas';
+import {
+  YSortedDrawable,
+  collectTerrainFeatureDrawables,
+  renderAtmosphericPostProcess,
+  renderBakedWorldTerrainLayer,
+  renderCartographicFog,
+} from '../engine/terrainRenderer';
+import { BakedWorldTerrain, bakeWorldTerrain } from '../engine/worldTerrainBaker';
 import { getTilePurchaseCost, previewCombat } from '../engine/turnEngine';
 import {
   BiomeType,
@@ -182,6 +186,9 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
   const activeDisastersRef = useRef<NaturalDisasterVfx[]>([]);
   const seenDisasterIdsRef = useRef<Set<string>>(new Set());
 
+  // Pre-rendered OffscreenCanvas world terrain cache (baked once per map load / viewMode change)
+  const bakedTerrainRef = useRef<BakedWorldTerrain | null>(null);
+
   // Track smooth tile-to-tile unit movement animations
   const prevGameIdRef = useRef<string>(state.id);
   const prevUnitCoordsRef = useRef<Map<string, { q: number; r: number }>>(new Map());
@@ -216,9 +223,15 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       if (mounted) setRenderTick((v) => v + 1);
     });
 
+    // Gentle 20fps ambient water shimmer & surf animation loop
+    const waterTimer = window.setInterval(() => {
+      if (mounted) setRenderTick((v) => (v + 1) % 100000);
+    }, 55);
+
     return () => {
       mounted = false;
       unsub();
+      window.clearInterval(waterTimer);
     };
   }, []);
 
@@ -502,374 +515,48 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
     const hexDrawWidth = HEX_SIZE * HEX_SQRT3 * 0.995;
     const playerAge = state.civs[playerCivId]?.ageIndex ?? 0;
 
-    // PASS 1: Seamless Connected Ground & Neighbor-Blended Biomes (Exact Hex Alignment)
+    // Collect unexplored frontier tiles for Cartographic Fog of War
     for (const item of visibleList) {
-      const { tile, px, py, explored } = item;
-      if (!explored) {
+      if (!item.explored) {
         const bordersExplored = NEIGHBOR_OFFSETS.some(([dq, dr]) => {
-          const nt = state.tiles[tileKey(tile.q + dq, tile.r + dr)];
+          const nt = state.tiles[tileKey(item.tile.q + dq, item.tile.r + dr)];
           return nt && nt.exploredBy[playerCivId];
         });
         if (bordersExplored) {
-          unexploredEdgeTiles.push({ tile, px, py });
-        }
-        continue;
-      }
-
-      const isWater = tile.biome === 'ocean' || tile.biome === 'coast';
-      const groundPts = getHexCorners(px, py, HEX_SIZE + 1.35, yScale);
-      const exactPts = getHexCorners(px, py, HEX_SIZE, yScale);
-
-      if (isWater) {
-        const coastShore =
-          tile.biome === 'coast'
-            ? resolveTileShoreline(tile, state.tiles, state.height)
-            : 'none';
-
-        drawHexPath(ctx, groundPts);
-        if (patterns.ocean) {
-          ctx.fillStyle = patterns.ocean;
-          ctx.fill();
-          ctx.fillStyle =
-            tile.biome === 'coast'
-              ? coastShore === 'coral_reef'
-                ? 'rgba(20, 184, 166, 0.38)'
-                : coastShore === 'coastal_swamp'
-                  ? 'rgba(21, 94, 67, 0.42)'
-                  : coastShore === 'icy_shore'
-                    ? 'rgba(125, 211, 252, 0.34)'
-                    : coastShore === 'high_cliffs' || coastShore === 'rocky_shore'
-                      ? 'rgba(30, 88, 118, 0.38)'
-                      : 'rgba(42, 134, 158, 0.36)'
-              : 'rgba(14, 34, 54, 0.50)';
-          ctx.fill();
-        } else {
-          ctx.fillStyle = tile.biome === 'coast' ? '#2c5f76' : '#183347';
-          ctx.fill();
-        }
-
-        // Smooth Coastal Shelf & Coast <-> Ocean feathering
-        if (tile.biome === 'coast') {
-          ctx.save();
-          drawHexPath(ctx, groundPts);
-          ctx.clip();
-          for (let e = 0; e < 6; e++) {
-            const [dq, dr] = NEIGHBOR_OFFSETS[e];
-            const nt = state.tiles[tileKey(tile.q + dq, tile.r + dr)];
-            const pA = exactPts[e];
-            const pB = exactPts[(e + 1) % 6];
-            const mx = (pA.x + pB.x) * 0.5;
-            const my = (pA.y + pB.y) * 0.5;
-
-            if (nt && nt.biome !== 'ocean' && nt.biome !== 'coast') {
-              const edgeShore =
-                nt.shoreline && nt.shoreline !== 'none' ? nt.shoreline : coastShore;
-              const grad = ctx.createLinearGradient(mx, my, px, py);
-              if (edgeShore === 'sandy_beach') {
-                grad.addColorStop(0, 'rgba(242, 218, 160, 0.58)');
-                grad.addColorStop(0.32, 'rgba(72, 219, 209, 0.42)');
-                grad.addColorStop(0.75, 'rgba(56, 189, 248, 0.12)');
-                grad.addColorStop(1, 'rgba(56, 189, 248, 0)');
-              } else if (edgeShore === 'coral_reef') {
-                grad.addColorStop(0, 'rgba(103, 232, 249, 0.56)');
-                grad.addColorStop(0.5, 'rgba(45, 212, 191, 0.28)');
-                grad.addColorStop(1, 'rgba(45, 212, 191, 0)');
-              } else if (edgeShore === 'coastal_swamp') {
-                grad.addColorStop(0, 'rgba(63, 98, 18, 0.52)');
-                grad.addColorStop(0.45, 'rgba(13, 148, 136, 0.28)');
-                grad.addColorStop(1, 'rgba(13, 148, 136, 0)');
-              } else if (edgeShore === 'icy_shore') {
-                grad.addColorStop(0, 'rgba(226, 232, 240, 0.62)');
-                grad.addColorStop(0.5, 'rgba(125, 211, 252, 0.24)');
-                grad.addColorStop(1, 'rgba(125, 211, 252, 0)');
-              } else {
-                grad.addColorStop(0, 'rgba(186, 230, 253, 0.42)');
-                grad.addColorStop(0.45, 'rgba(56, 189, 248, 0.16)');
-                grad.addColorStop(1, 'rgba(56, 189, 248, 0)');
-              }
-              ctx.fillStyle = grad;
-              ctx.beginPath();
-              ctx.moveTo(pA.x, pA.y);
-              ctx.lineTo(pB.x, pB.y);
-              ctx.lineTo(px, py);
-              ctx.closePath();
-              ctx.fill();
-            } else if (nt && nt.biome === 'ocean') {
-              // Feather coast into deep ocean across shared water edge
-              const oGrad = ctx.createLinearGradient(mx, my, px, py);
-              oGrad.addColorStop(0, 'rgba(14, 34, 54, 0.44)');
-              oGrad.addColorStop(0.65, 'rgba(14, 34, 54, 0)');
-              ctx.fillStyle = oGrad;
-              ctx.beginPath();
-              ctx.moveTo(pA.x, pA.y);
-              ctx.lineTo(pB.x, pB.y);
-              ctx.lineTo(px, py);
-              ctx.closePath();
-              ctx.fill();
-            }
-          }
-          ctx.restore();
-        }
-        drawPolarIceIfArctic(ctx, state, tile, px, py, isIso);
-        continue;
-      }
-
-      // Land ground fill using continuous tiled terrain texture + climate palette wash
-      const texKey: TextureKey =
-        tile.biome === 'desert'
-          ? 'desert'
-          : tile.biome === 'tundra'
-            ? 'tundra'
-            : tile.biome === 'forest'
-              ? 'forest'
-              : 'plains';
-
-      ctx.save();
-      drawHexPath(ctx, groundPts);
-      ctx.clip();
-
-      if (patterns[texKey]) {
-        ctx.fillStyle = patterns[texKey]!;
-        ctx.fill();
-      } else {
-        ctx.fillStyle = getBaseBiomeColor(tile);
-        ctx.fill();
-      }
-
-      const wash = getCivClimateWash(tile.biome, tile.temperature);
-      if (wash) {
-        ctx.fillStyle = wash;
-        ctx.fill();
-      }
-
-      // Side-to-side biome transition feathering & ecotone blending across shared hex edges!
-      for (let e = 0; e < 6; e++) {
-        const [dq, dr] = NEIGHBOR_OFFSETS[e];
-        const nt = state.tiles[tileKey(tile.q + dq, tile.r + dr)];
-        if (!nt || !nt.exploredBy[playerCivId]) continue;
-        if (nt.biome === 'ocean' || nt.biome === 'coast') continue;
-        if (nt.biome !== tile.biome || nt.temperature !== tile.temperature) {
-          const neighborTone = getBiomeBlendTint(nt);
-          if (!neighborTone) continue;
-          const pA = exactPts[e];
-          const pB = exactPts[(e + 1) % 6];
-          const mx = (pA.x + pB.x) * 0.5;
-          const my = (pA.y + pB.y) * 0.5;
-          const ix = mx + (px - mx) * 0.72;
-          const iy = my + (py - my) * 0.72;
-          const bGrad = ctx.createLinearGradient(mx, my, ix, iy);
-          bGrad.addColorStop(0, neighborTone);
-          bGrad.addColorStop(0.55, neighborTone.replace(/[\d.]+\)$/, '0.28)'));
-          bGrad.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.fillStyle = bGrad;
-          ctx.beginPath();
-          ctx.moveTo(pA.x, pA.y);
-          ctx.lineTo(pB.x, pB.y);
-          ctx.lineTo(px, py);
-          ctx.closePath();
-          ctx.fill();
-
-          // Organic steppe grass tufts & sand drifts bridging Desert <-> Grass Hills / Plains borders
-          const isDesertToGreen =
-            (tile.biome === 'desert' &&
-              (nt.biome === 'hills' || nt.biome === 'plains' || nt.biome === 'forest')) ||
-            ((tile.biome === 'hills' || tile.biome === 'plains') && nt.biome === 'desert');
-          if (isDesertToGreen) {
-            const ex = pB.x - pA.x;
-            const ey = pB.y - pA.y;
-            const nx = (px - mx) * 0.26;
-            const ny = (py - my) * 0.26;
-            for (let s = 0; s < 3; s++) {
-              const t = 0.22 + s * 0.28;
-              const tx = pA.x + ex * t + nx * (s % 2 === 0 ? 0.55 : 0.9);
-              const ty = pA.y + ey * t + ny * (s % 2 === 0 ? 0.55 : 0.9);
-              ctx.fillStyle =
-                tile.biome === 'desert'
-                  ? 'rgba(108, 142, 62, 0.52)'
-                  : 'rgba(222, 184, 104, 0.55)';
-              ctx.beginPath();
-              ctx.ellipse(tx, ty, 5.2, 2.8 * yScale, 0, 0, Math.PI * 2);
-              ctx.fill();
-            }
-          }
-        }
-      }
-
-      // Subtle directional relief shading for hills & mountains
-      if (tile.biome === 'hills' || tile.biome === 'mountain') {
-        const relGrad = ctx.createLinearGradient(
-          px - HEX_SIZE * 0.6,
-          py - HEX_SIZE * yScale * 0.6,
-          px + HEX_SIZE * 0.6,
-          py + HEX_SIZE * yScale * 0.6
-        );
-        relGrad.addColorStop(0, 'rgba(255, 250, 230, 0.14)');
-        relGrad.addColorStop(1, 'rgba(15, 23, 42, 0.22)');
-        ctx.fillStyle = relGrad;
-        ctx.fillRect(px - HEX_SIZE, py - HEX_SIZE * yScale, HEX_SIZE * 2, HEX_SIZE * yScale * 2);
-      }
-
-      ctx.restore();
-
-      // Subtle hairline cartographic hex boundary
-      drawHexPath(ctx, exactPts);
-      ctx.strokeStyle = 'rgba(28, 30, 20, 0.15)';
-      ctx.lineWidth = 0.7;
-      ctx.stroke();
-
-      // Diverse Shoreline Transitions (Sandy Beaches, Rocky Shores, High Cliffs, Swamps, Coral Reefs, Icy Shores)
-      for (let e = 0; e < 6; e++) {
-        const [dq, dr] = NEIGHBOR_OFFSETS[e];
-        const nt = state.tiles[tileKey(tile.q + dq, tile.r + dr)];
-        if (nt && (nt.biome === 'ocean' || nt.biome === 'coast')) {
-          const pA = exactPts[e];
-          const pB = exactPts[(e + 1) % 6];
-          const edgeShore =
-            nt.shoreline && nt.shoreline !== 'none'
-              ? nt.shoreline
-              : resolveTileShoreline(tile, state.tiles, state.height);
-          drawTypedShorelineTransition(
-            ctx,
-            tile,
-            pA,
-            pB,
-            px,
-            py,
-            e,
-            edgeShore,
-            isIso,
-            yScale
-          );
+          unexploredEdgeTiles.push({ tile: item.tile, px: item.px, py: item.py });
         }
       }
     }
 
-    // PASS 2: Rivers & Neighbor-Connected Roads (drawn directly on aligned ground plane)
+    const timeSec = performance.now() * 0.001;
+
+    // Pre-bake continuous heightfield, normal-shaded hill relief, micro-textures, bathymetry,
+    // coastlines, and spline rivers ONCE per map load or viewMode switch for locked 60 FPS pan/zoom.
+    if (
+      !bakedTerrainRef.current ||
+      bakedTerrainRef.current.gameId !== state.id ||
+      bakedTerrainRef.current.viewMode !== viewMode
+    ) {
+      bakedTerrainRef.current = bakeWorldTerrain(state, viewMode);
+    }
+
+    // LAYER 1 & 2: Blit pre-rendered continuous world terrain + animated water shimmer
+    renderBakedWorldTerrainLayer(ctx, bakedTerrainRef.current, visibleList, yScale, timeSec);
+
+    // Neighbor-Connected Roads (drawn directly on aligned ground plane)
     for (const item of visibleList) {
       if (!item.explored) continue;
-      const { tile, px, py } = item;
-      const hexPts = getHexCorners(px, py, HEX_SIZE, yScale);
-
-      if (tile.riverEdges && tile.riverEdges.some(Boolean)) {
-        drawTileRivers(ctx, tile, hexPts);
-      }
-
-      if (tile.hasRoad) {
-        drawConnectedRoad(ctx, state, cityByTile, tile, px, py, viewMode);
+      if (item.tile.hasRoad) {
+        drawConnectedRoad(ctx, state, cityByTile, item.tile, item.px, item.py, viewMode);
       }
     }
 
-    // PASS 3: Cliff-Trimmed, Edge-Feathered 3D Biome Dioramas, Improvements & Cities (Back-to-Front)
+    // Explored-but-currently-unseen Fog-of-War ground tint
     for (const item of visibleList) {
-      if (!item.explored) continue;
-      const { tile, px, py } = item;
-      const cityOnTile = cityByTile.get(tileKey(tile.q, tile.r));
-      const hasAdjLand = NEIGHBOR_OFFSETS.some(([dq, dr]) => {
-        const nt = state.tiles[tileKey(tile.q + dq, tile.r + dr)];
-        return nt && nt.biome !== 'ocean' && nt.biome !== 'coast';
-      });
-
-      let dioramaSprite: SlicedSprite | null = null;
-      const shouldDrawTerrainDiorama =
-        tile.biome === 'forest' ||
-        tile.biome === 'hills' ||
-        tile.biome === 'mountain' ||
-        tile.biome === 'coast' ||
-        tile.feature === 'ancient_ruins' ||
-        tile.feature === 'natural_wonder' ||
-        tile.biome === 'desert' ||
-        isBiomeTransitionTile(tile, state.tiles);
-
-      if (cityOnTile) {
-        const cityCiv = state.civs[cityOnTile.civId];
-        dioramaSprite = getInfrastructureSprite(
-          'city',
-          cityCiv?.ageIndex ?? 0,
-          tile.q,
-          tile.r,
-          hasAdjLand
-        );
-      } else if (tile.improvement !== 'none' && tile.improvement !== 'road') {
-        dioramaSprite = getInfrastructureSprite(tile.improvement, playerAge, tile.q, tile.r);
-      } else if (shouldDrawTerrainDiorama) {
-        dioramaSprite = getTerrainTileSprite(tile, hasAdjLand, state.tiles);
-      }
-
-      // Multi-tile cluster base bridging (fuses High Peaks + Companion Mountains + Foothills, and Oasis + Rim Dunes)
-      if (isIso && !cityOnTile) {
-        if (tile.biome === 'mountain') {
-          for (const [dq, dr] of NEIGHBOR_OFFSETS) {
-            const nt = state.tiles[tileKey(tile.q + dq, tile.r + dr)];
-            if (nt && (nt.biome === 'mountain' || nt.biome === 'hills') && nt.exploredBy[playerCivId]) {
-              const np = axialToPixel(nt.q, nt.r, viewMode);
-              const mx = (px + np.x) * 0.5;
-              const my = (py + np.y) * 0.5;
-              const ridgeGrad = ctx.createRadialGradient(mx, my, 2, mx, my, HEX_SIZE * 0.62);
-              const ridgeColor =
-                tile.temperature === 'tropical'
-                  ? 'rgba(30, 82, 44, 0.42)'
-                  : tile.temperature === 'arid'
-                    ? 'rgba(154, 92, 54, 0.42)'
-                    : 'rgba(71, 85, 105, 0.42)';
-              ridgeGrad.addColorStop(0, ridgeColor);
-              ridgeGrad.addColorStop(1, 'rgba(0,0,0,0)');
-              ctx.fillStyle = ridgeGrad;
-              ctx.beginPath();
-              ctx.ellipse(mx, my, HEX_SIZE * 0.62, HEX_SIZE * yScale * 0.62, 0, 0, Math.PI * 2);
-              ctx.fill();
-            }
-          }
-        } else if (tile.biome === 'desert' && isOasisCenterTile(tile, state.tiles)) {
-          const oasisHalo = ctx.createRadialGradient(px, py, HEX_SIZE * 0.3, px, py, HEX_SIZE * 1.45);
-          oasisHalo.addColorStop(0, 'rgba(52, 211, 153, 0.28)');
-          oasisHalo.addColorStop(0.55, 'rgba(132, 204, 22, 0.14)');
-          oasisHalo.addColorStop(1, 'rgba(222, 184, 104, 0)');
-          ctx.fillStyle = oasisHalo;
-          ctx.beginPath();
-          ctx.ellipse(px, py, HEX_SIZE * 1.45, HEX_SIZE * yScale * 1.45, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-
-      if (isIso && dioramaSprite && dioramaSprite.dioramaCanvas) {
-        const targetW = HEX_SIZE * HEX_SQRT3 * 1.006;
-        const scale = targetW / dioramaSprite.width;
-        const drawH = (dioramaSprite.dioramaHeight ?? dioramaSprite.height) * scale;
-        const bottomDiamondY = py + HEX_SIZE * yScale;
-        const drawX = px - targetW / 2;
-        const drawY = bottomDiamondY - drawH;
-        ctx.drawImage(dioramaSprite.dioramaCanvas, drawX, drawY, targetW, drawH);
-
-        if (tile.improvementDamaged && tile.improvement !== 'none') {
-          drawHexPath(ctx, getHexCorners(px, py, HEX_SIZE * 0.78, yScale));
-          ctx.fillStyle = 'rgba(220, 38, 38, 0.34)';
-          ctx.fill();
-        }
-      } else {
-        // Top-Down crisp miniature fallback + vector detail
-        if (dioramaSprite && dioramaSprite.dioramaCanvas && !isIso) {
-          const w = HEX_SIZE * 1.38;
-          const h = w * ((dioramaSprite.dioramaHeight ?? dioramaSprite.height) / dioramaSprite.width);
-          ctx.drawImage(dioramaSprite.dioramaCanvas, px - w / 2, py - h / 2, w, h);
-        } else {
-          if (tile.biome === 'forest' || tile.biome === 'hills' || tile.biome === 'mountain' || tile.biome === 'desert') {
-            drawCiv3DBiomeProps(ctx, tile, px, py, isIso);
-          }
-          if (tile.improvement !== 'none' && tile.improvement !== 'road') {
-            drawImprovement(ctx, tile, px, py, isIso);
-          }
-        }
-      }
-
-      if (tile.feature !== 'none') {
-        drawNaturalFeature(ctx, tile, px, py);
-      }
-
-      if (!item.visible) {
-        drawHexPath(ctx, getHexCorners(px, py, HEX_SIZE + 0.6, yScale));
-        ctx.fillStyle = 'rgba(38, 32, 22, 0.38)';
-        ctx.fill();
-      }
+      if (!item.explored || item.visible) continue;
+      drawHexPath(ctx, getHexCorners(item.px, item.py, HEX_SIZE + 0.6, yScale));
+      ctx.fillStyle = 'rgba(38, 32, 22, 0.36)';
+      ctx.fill();
     }
 
     // PASS 4: Continuous Outer Empire Borders (Exact Hex Alignment)
@@ -980,28 +667,69 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       }
     }
 
-    // PASS 6: Soft Blurred Parchment Frontier Cloud
-    if (unexploredEdgeTiles.length > 0 && cam.zoom > 0.55) {
-      ctx.save();
-      ctx.filter = 'blur(11px)';
-      for (const item of unexploredEdgeTiles) {
-        ctx.fillStyle = 'rgba(216, 197, 158, 0.85)';
-        ctx.beginPath();
-        ctx.arc(item.px, item.py, HEX_SIZE * 0.92, 0, Math.PI * 2);
-        ctx.fill();
+    // LAYER 3 (PHASE 3): Unified Y-Sorted 2.5D Terrain Features, Bridging Clusters, Improvements, Cities & Units
+    const cityTileKeys = new Set<string>(cityByTile.keys());
+    const ySortedQueue: YSortedDrawable[] = collectTerrainFeatureDrawables(
+      state,
+      visibleList,
+      viewMode,
+      HEX_SIZE,
+      yScale,
+      cityTileKeys
+    );
+
+    // Enqueue Tile Improvements & Natural Features
+    for (const item of visibleList) {
+      if (!item.explored) continue;
+      const { tile, px, py } = item;
+      const cityOnTile = cityByTile.get(tileKey(tile.q, tile.r));
+      if (!cityOnTile && tile.improvement !== 'none' && tile.improvement !== 'road') {
+        const infraSp = getInfrastructureSprite(tile.improvement, playerAge, tile.q, tile.r);
+        ySortedQueue.push({
+          sortY: py + 1,
+          draw: (c) => {
+            if (isIso && infraSp?.dioramaCanvas) {
+              const targetW = HEX_SIZE * HEX_SQRT3 * 0.98;
+              const scale = targetW / infraSp.width;
+              const drawH = (infraSp.dioramaHeight ?? infraSp.height) * scale;
+              c.drawImage(
+                infraSp.dioramaCanvas,
+                px - targetW * 0.5,
+                py + HEX_SIZE * yScale - drawH,
+                targetW,
+                drawH
+              );
+            } else {
+              drawImprovement(c, tile, px, py, isIso);
+            }
+            if (tile.improvementDamaged) {
+              drawHexPath(c, getHexCorners(px, py, HEX_SIZE * 0.78, yScale));
+              c.fillStyle = 'rgba(220, 38, 38, 0.34)';
+              c.fill();
+            }
+          },
+        });
       }
-      ctx.filter = 'none';
-      ctx.restore();
+      if (tile.feature !== 'none') {
+        ySortedQueue.push({
+          sortY: py + 2,
+          draw: (c) => drawNaturalFeature(c, tile, px, py),
+        });
+      }
     }
 
-    // PASS 7: Barbarian Camps & City Banners
+    // Enqueue Barbarian Camps
     for (const camp of Object.values(state.barbarianCamps)) {
       const tile = state.tiles[tileKey(camp.q, camp.r)];
       if (!tile?.exploredBy[playerCivId]) continue;
       const { x: px, y: py } = axialToPixel(camp.q, camp.r, viewMode);
-      drawBarbarianCamp(ctx, camp.disposition === 'peaceful', camp.name, px, py);
+      ySortedQueue.push({
+        sortY: py + 3,
+        draw: (c) => drawBarbarianCamp(c, camp.disposition === 'peaceful', camp.name, px, py),
+      });
     }
 
+    // Enqueue Cities (with procedural/atlas citadel & banner)
     for (const city of Object.values(state.cities)) {
       const tile = state.tiles[tileKey(city.q, city.r)];
       if (!tile?.exploredBy[playerCivId]) continue;
@@ -1011,20 +739,44 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
         const nt = state.tiles[tileKey(city.q + dq, city.r + dr)];
         return nt && (nt.biome === 'coast' || nt.biome === 'ocean');
       });
-      draw3DCitadel(
-        ctx,
-        city,
-        civ.color,
-        civ.ageIndex,
-        selectedCityId === city.id,
-        hasCoastalWater,
-        Boolean(spriteAtlas.getAtlas('infrastructure') && isIso),
-        px,
-        py
+      const citySprite = getInfrastructureSprite(
+        'city',
+        civ?.ageIndex ?? 0,
+        city.q,
+        city.r,
+        hasCoastalWater
       );
+      ySortedQueue.push({
+        sortY: py + 4,
+        draw: (c) => {
+          if (isIso && citySprite?.dioramaCanvas) {
+            const targetW = HEX_SIZE * HEX_SQRT3 * 1.02;
+            const scale = targetW / citySprite.width;
+            const drawH = (citySprite.dioramaHeight ?? citySprite.height) * scale;
+            c.drawImage(
+              citySprite.dioramaCanvas,
+              px - targetW * 0.5,
+              py + HEX_SIZE * yScale - drawH,
+              targetW,
+              drawH
+            );
+          }
+          draw3DCitadel(
+            c,
+            city,
+            civ.color,
+            civ.ageIndex,
+            selectedCityId === city.id,
+            hasCoastalWater,
+            Boolean(citySprite?.dioramaCanvas && isIso),
+            px,
+            py
+          );
+        },
+      });
     }
 
-    // PASS 8: 3D Strategy Unit Miniatures + Floating Civ Pins (with smooth tile-to-tile interpolation)
+    // Enqueue Barbarian & Civilization Units (with smooth tile-to-tile interpolation)
     const nowPerf = performance.now();
     const resolveAnimatedPos = (id: string, q: number, r: number) => {
       const anim = activeUnitMovesRef.current.get(id);
@@ -1060,46 +812,54 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       return { px: pos.x, py: pos.y, strideLift: 0 };
     };
 
-    const barbDrawList = Object.values(state.barbarianUnits)
-      .filter((bu) => state.tiles[tileKey(bu.q, bu.r)]?.visibleTo[playerCivId])
-      .map((bu) => ({ bu, ...resolveAnimatedPos(bu.id, bu.q, bu.r) }))
-      .sort((a, b) => a.py - b.py || a.px - b.px);
-
-    for (const item of barbDrawList) {
-      drawBarbarianMiniature(
-        ctx,
-        item.bu.disposition === 'peaceful',
-        item.bu.hp,
-        item.bu.maxHp,
-        item.px,
-        item.py,
-        item.strideLift
-      );
+    for (const bu of Object.values(state.barbarianUnits)) {
+      if (!state.tiles[tileKey(bu.q, bu.r)]?.visibleTo[playerCivId]) continue;
+      const { px, py, strideLift } = resolveAnimatedPos(bu.id, bu.q, bu.r);
+      ySortedQueue.push({
+        sortY: py + 6,
+        draw: (c) =>
+          drawBarbarianMiniature(
+            c,
+            bu.disposition === 'peaceful',
+            bu.hp,
+            bu.maxHp,
+            px,
+            py,
+            strideLift
+          ),
+      });
     }
 
-    const unitDrawList = Object.values(state.units)
-      .filter((unit) => {
-        const tile = state.tiles[tileKey(unit.q, unit.r)];
-        return unit.civId === playerCivId || Boolean(tile?.visibleTo[playerCivId]);
-      })
-      .map((unit) => ({ unit, ...resolveAnimatedPos(unit.id, unit.q, unit.r) }))
-      .sort((a, b) => a.py - b.py || a.px - b.px);
-
-    for (const item of unitDrawList) {
-      const { unit, px, py, strideLift } = item;
+    for (const unit of Object.values(state.units)) {
+      const tile = state.tiles[tileKey(unit.q, unit.r)];
+      if (unit.civId !== playerCivId && !tile?.visibleTo[playerCivId]) continue;
+      const { px, py, strideLift } = resolveAnimatedPos(unit.id, unit.q, unit.r);
       const civ = state.civs[unit.civId];
       const def = UNIT_DEFS[unit.defId];
-      drawIllustratedUnit(
-        ctx,
-        unit,
-        def,
-        civ.color,
-        selectedUnitId === unit.id,
-        px,
-        py,
-        strideLift
-      );
+      ySortedQueue.push({
+        sortY: py + 7,
+        draw: (c) =>
+          drawIllustratedUnit(
+            c,
+            unit,
+            def,
+            civ.color,
+            selectedUnitId === unit.id,
+            px,
+            py,
+            strideLift
+          ),
+      });
     }
+
+    // Execute unified Y-sorted depth pass
+    ySortedQueue.sort((a, b) => a.sortY - b.sortY);
+    for (const drawable of ySortedQueue) {
+      drawable.draw(ctx);
+    }
+
+    // LAYER 4 (PHASE 4): Cartographic Parchment Fog of War
+    renderCartographicFog(ctx, unexploredEdgeTiles, HEX_SIZE, cam.zoom);
 
     // PASS 9: Hover Tactical Combat Odds Preview
     if (selectedUnitId && hoverKeyRef.current && attackableKeys.has(hoverKeyRef.current)) {
@@ -1134,6 +894,10 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
     }
 
     ctx.restore();
+
+    // LAYER 4 (PHASE 4): Unified Sunlight, Atmospheric Grading & Vignette Post-Process
+    renderAtmosphericPostProcess(ctx, W, H);
+
     ctx.restore();
   }, [
     state,

@@ -10,9 +10,11 @@ import {
   NaturalFeatureType,
   ShorelineType,
   TemperatureZone,
+  TerrainSubType,
   UnitState,
 } from '../types/game';
 import { hexDistance, hexInRange, hexNeighbors, tileKey } from './hexMath';
+import { fbm2D, ridgedNoise2D } from './noise';
 
 const AI_CIV_PRESETS: Array<{
   id: string;
@@ -118,118 +120,61 @@ export function generateWorld(config: GameConfig): GameState {
   const rng = createRng(seed);
   const { width, height } = getDimensions(config.mapSize);
 
-  // Smooth multi-octave noise blobs for organic landmasses
-  const blobCount =
+  // Multi-octave Simplex/Perlin Elevation, Moisture, and Temperature fields
+  const elevSeed = seed * 3 + 17;
+  const ridgeSeed = seed * 5 + 31;
+  const moistSeed = seed * 7 + 53;
+  const tempSeed = seed * 11 + 79;
+
+  // Map-type macro shaping + domain-warped fBm continents & tectonic ridges
+  const elevScale =
     config.mapType === 'archipelago'
-      ? 22
+      ? 0.165
       : config.mapType === 'pangaea'
-        ? 6
-        : config.mapType === 'inland_sea'
-          ? 12
-          : 11;
-
-  const blobs: Array<{ x: number; y: number; radius: number; weight: number }> = [];
-  for (let i = 0; i < blobCount; i++) {
-    blobs.push({
-      x: (0.12 + rng() * 0.76) * width,
-      y: (0.12 + rng() * 0.76) * height,
-      radius:
-        config.mapType === 'archipelago'
-          ? 2.2 + rng() * 2.5
-          : config.mapType === 'pangaea'
-            ? 5.8 + rng() * 4.8
-            : 3.6 + rng() * 4.0,
-      weight: 0.65 + rng() * 0.55,
-    });
-  }
-
-  // Large regional moisture basins so forests, deserts, and plains form expansive contiguous landscapes
-  const moistureBlobs: Array<{ x: number; y: number; radius: number; delta: number }> = [];
-  const moistureBlobCount = 14;
-  for (let i = 0; i < moistureBlobCount; i++) {
-    moistureBlobs.push({
-      x: rng() * width,
-      y: rng() * height,
-      radius: 4.8 + rng() * 6.5,
-      delta: (i % 2 === 0 ? 1 : -1) * (0.38 + rng() * 0.35),
-    });
-  }
-
-  // Coherent tectonic hill/mountain ridges for natural upland chains and foothills
-  const ridgeSeeds: Array<{
-    x: number;
-    y: number;
-    cosA: number;
-    sinA: number;
-    len: number;
-    width: number;
-    strength: number;
-  }> = [];
-  const ridgeCount = config.mapSize === 'large' ? 7 : config.mapSize === 'medium' ? 5 : 4;
-  for (let i = 0; i < ridgeCount; i++) {
-    const ang = rng() * Math.PI;
-    ridgeSeeds.push({
-      x: (0.18 + rng() * 0.64) * width,
-      y: (0.18 + rng() * 0.64) * height,
-      cosA: Math.cos(ang),
-      sinA: Math.sin(ang),
-      len: 4.5 + rng() * 5.5,
-      width: 1.6 + rng() * 1.2,
-      strength: 0.28 + rng() * 0.22,
-    });
-  }
-
-  const latPhase = rng() * Math.PI * 2;
-  const lonFreq = 2.0 + rng() * 0.8;
+        ? 0.085
+        : 0.115;
 
   const tiles: Record<string, HexTile> = {};
   const landCoords: Array<{ q: number; r: number; col: number; row: number }> = [];
   const moistureMap = new Map<string, number>();
   const latMap = new Map<string, number>();
+  const rawElevMap = new Map<string, number>();
 
+  // Pass 1: Continuous Elevation & Latitude Temperature fields
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
       const { q, r } = offsetToAxial(col, row);
       const key = tileKey(q, r);
 
-      // Compute smooth height field
-      let elev = 0;
-      for (const b of blobs) {
-        const dx = col - b.x;
-        const dy = row - b.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < b.radius * 1.85) {
-          elev += b.weight * Math.exp(-(dist * dist) / (2 * b.radius * b.radius));
-        }
+      // Domain warp for organic coastlines
+      const warpX = (fbm2D(col * 0.08, row * 0.08, elevSeed + 101, 2) - 0.5) * 3.2;
+      const warpY = (fbm2D(col * 0.08, row * 0.08, elevSeed + 202, 2) - 0.5) * 3.2;
+      const wx = (col + warpX) * elevScale;
+      const wy = (row + warpY) * elevScale;
+
+      let elev = fbm2D(wx, wy, elevSeed, 4, 2.05, 0.52) * 1.15;
+      const ridge = ridgedNoise2D(wx * 1.25, wy * 1.25, ridgeSeed, 3);
+
+      // Tectonic ridges boost highland chains where base continent is already above sea level
+      if (elev > 0.48 && ridge > 0.52) {
+        elev += (ridge - 0.52) * 1.15;
+      } else {
+        elev += ridge * 0.14;
       }
 
-      // Add coherent tectonic ridge elevation so hills & mountains form connected chains
-      for (const rg of ridgeSeeds) {
-        const dx = col - rg.x;
-        const dy = row - rg.y;
-        const along = dx * rg.cosA + dy * rg.sinA;
-        const perp = -dx * rg.sinA + dy * rg.cosA;
-        if (Math.abs(along) < rg.len * 1.4 && Math.abs(perp) < rg.width * 2.5) {
-          const alongFall = Math.exp(-(along * along) / (2 * rg.len * rg.len));
-          const perpFall = Math.exp(-(perp * perp) / (2 * rg.width * rg.width));
-          elev += rg.strength * alongFall * perpFall;
-        }
-      }
-
-      // Map type shaping
       const nx = col / width - 0.5;
       const ny = row / height - 0.5;
       const centerDist = Math.sqrt(nx * nx + ny * ny);
 
       if (config.mapType === 'pangaea') {
-        elev += Math.max(0, 0.78 - centerDist * 1.42);
+        elev += Math.max(0, 0.44 - centerDist * 0.92);
       } else if (config.mapType === 'inland_sea') {
-        if (centerDist < 0.23) elev -= 0.85;
-        else elev += 0.35;
+        if (centerDist < 0.24) elev -= 0.55;
+        else elev += 0.22;
       } else if (config.mapType === 'wild_frontier') {
-        elev += 0.26 + (rng() - 0.5) * 0.14;
+        elev += 0.18;
       } else if (config.mapType === 'archipelago') {
-        elev -= 0.12;
+        elev -= 0.09;
       }
 
       // Edge ocean falloff
@@ -237,111 +182,111 @@ export function generateWorld(config: GameConfig): GameState {
       const edgeY = Math.min(row, height - 1 - row) / (height * 0.14);
       const edgeFactor = Math.min(1, Math.min(edgeX, edgeY));
       if (config.mapType !== 'inland_sea') {
-        elev *= 0.35 + 0.65 * edgeFactor;
+        elev *= 0.32 + 0.68 * edgeFactor;
       }
 
-      // Subtle micro-relief without breaking regional land coherence
-      elev += (rng() - 0.5) * 0.07;
+      rawElevMap.set(key, elev);
 
-      // Smooth regional moisture field (0..1)
-      let moisture = 0.52;
-      for (const mb of moistureBlobs) {
-        const dx = col - mb.x;
-        const dy = row - mb.y;
-        const d2 = dx * dx + dy * dy;
-        moisture += mb.delta * Math.exp(-d2 / (2 * mb.radius * mb.radius));
+      // Latitude temperature cooling toward poles (0 = equator, 1 = poles)
+      const baseLat = Math.abs(row / Math.max(1, height - 1) - 0.5) * 2;
+      const tempNoise = (fbm2D(col * 0.1, row * 0.1, tempSeed, 3) - 0.5) * 0.14;
+      const effLat = Math.max(0, Math.min(1, baseLat + tempNoise));
+      latMap.set(key, effLat);
+    }
+  }
+
+  // Pass 2: Moisture field with orographic rain-shadow drying behind mountain chains
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      const { q, r } = offsetToAxial(col, row);
+      const key = tileKey(q, r);
+      const elev = rawElevMap.get(key) ?? 0.4;
+
+      let moisture = fbm2D(col * 0.095, row * 0.095, moistSeed, 4, 2.0, 0.52);
+
+      // Check prevailing windward (west/northwest) neighbors for mountain rain-shadow
+      let mountainBarrier = 0;
+      for (let d = 1; d <= 3; d++) {
+        const wCol = col - d;
+        if (wCol >= 0) {
+          const wAxial = offsetToAxial(wCol, row);
+          const wElev = rawElevMap.get(tileKey(wAxial.q, wAxial.r)) ?? 0;
+          if (wElev > 0.94) {
+            mountainBarrier += (4 - d) * 0.075;
+          }
+        }
       }
-      moisture += (rng() - 0.5) * 0.06;
-      moisture = Math.max(0.02, Math.min(0.98, moisture));
+      // Coastal humidity bonus when near ocean/water
+      let coastalHumid = 0;
+      for (const n of hexNeighbors(q, r)) {
+        const nElev = rawElevMap.get(tileKey(n.q, n.r));
+        if (nElev !== undefined && nElev < 0.52) {
+          coastalHumid += 0.035;
+        }
+      }
+
+      moisture = Math.max(
+        0.02,
+        Math.min(0.98, moisture + coastalHumid - Math.min(0.32, mountainBarrier))
+      );
       moistureMap.set(key, moisture);
 
-      // Latitude climate zone (0 = equator at center, 1 = north/south poles) with gentle organic contour
-      const baseLat = Math.abs(row / Math.max(1, height - 1) - 0.5) * 2;
-      const latWave = Math.sin((col / width) * Math.PI * lonFreq + latPhase) * 0.04;
-      const effLat = Math.max(0, Math.min(1, baseLat + latWave));
-      latMap.set(key, effLat);
-
+      const effLat = latMap.get(key) ?? 0.5;
       let biome: BiomeType = 'ocean';
       let temperature: TemperatureZone = 'ocean';
 
-      if (elev < 0.46) {
+      if (elev < 0.48) {
         biome = 'ocean';
         temperature = 'ocean';
-      } else if (elev < 0.57) {
+      } else if (elev < 0.56) {
         biome = 'coast';
         temperature = 'ocean';
       } else {
-        // Strict latitude-respecting climate zones with large regional moisture basins:
-        // 1. Polar / Arctic Zone (High latitudes near top & bottom poles)
-        if (effLat >= 0.75) {
+        // Climate & Elevation classification
+        if (effLat >= 0.76) {
           temperature = 'arctic';
-          if (elev > 1.24) {
+          if (elev > 0.99) {
             biome = 'mountain';
-          } else if (elev > 0.96) {
+          } else if (elev > 0.82) {
             biome = 'hills';
-          } else if (effLat < 0.84 && moisture > 0.55) {
-            biome = 'forest'; // Sub-arctic snowy taiga forest belt
+          } else if (effLat < 0.85 && moisture > 0.52) {
+            biome = 'forest'; // Boreal taiga belt
           } else {
             biome = 'tundra';
           }
-        }
-        // 2. Temperate Zone (Mid-latitudes: sweeping forests, grasslands, and rolling green hills)
-        else if (effLat >= 0.38) {
+        } else if (effLat >= 0.38) {
           temperature = 'temperate';
-          if (elev > 1.24) {
+          if (elev > 0.99) {
             biome = 'mountain';
-          } else if (elev > 0.93) {
+          } else if (elev > 0.81) {
             biome = 'hills';
-          } else if (moisture >= 0.51) {
+          } else if (moisture >= 0.52) {
             biome = 'forest';
           } else {
             biome = 'plains';
           }
-        }
-        // 3. Subtropical / Horse-Latitude Belt (Large contiguous deserts, arid mesas, or savanna/grass hills)
-        else if (effLat >= 0.17) {
-          if (moisture < 0.47) {
+        } else if (effLat >= 0.17) {
+          if (moisture < 0.42) {
             temperature = 'arid';
-            if (elev > 1.25) {
-              biome = 'mountain';
-            } else if (elev > 0.95) {
-              biome = 'hills';
-            } else {
-              biome = 'desert';
-            }
-          } else if (moisture < 0.62) {
-            // Smooth transition belt (grassland / grassy hills connecting desert to temperate/tropical)
-            temperature = effLat >= 0.26 ? 'temperate' : 'arid';
-            if (elev > 1.24) {
-              biome = 'mountain';
-            } else if (elev > 0.91) {
-              biome = 'hills';
-            } else {
-              biome = 'plains';
-            }
+            biome = elev > 1.0 ? 'mountain' : elev > 0.83 ? 'hills' : 'desert';
+          } else if (moisture < 0.58) {
+            temperature = effLat >= 0.27 ? 'temperate' : 'arid';
+            biome = elev > 0.99 ? 'mountain' : elev > 0.81 ? 'hills' : 'plains';
           } else {
             temperature = effLat < 0.25 ? 'tropical' : 'temperate';
-            if (elev > 1.24) {
-              biome = 'mountain';
-            } else if (elev > 0.94) {
-              biome = 'hills';
-            } else {
-              biome = 'forest';
-            }
+            biome = elev > 0.99 ? 'mountain' : elev > 0.82 ? 'hills' : 'forest';
           }
-        }
-        // 4. Equatorial / Tropical Zone (Lush rainforests, tropical highlands, or dry equatorial basins)
-        else {
+        } else {
           if (moisture < 0.30) {
             temperature = 'arid';
-            biome = elev > 1.24 ? 'mountain' : elev > 0.95 ? 'hills' : 'desert';
+            biome = elev > 1.0 ? 'mountain' : elev > 0.83 ? 'hills' : 'desert';
           } else {
             temperature = 'tropical';
-            if (elev > 1.24) {
+            if (elev > 0.99) {
               biome = 'mountain';
-            } else if (elev > 0.94) {
+            } else if (elev > 0.82) {
               biome = 'hills';
-            } else if (moisture >= 0.46) {
+            } else if (moisture >= 0.48) {
               biome = 'forest';
             } else {
               biome = 'plains';
@@ -367,7 +312,8 @@ export function generateWorld(config: GameConfig): GameState {
         r,
         biome,
         temperature,
-        elevation: Math.max(0, Math.min(1, elev / 1.4)),
+        elevation: Math.max(0, Math.min(1, elev / 1.35)),
+        moisture,
         feature,
         featureSurveyed: false,
         improvement: 'none',
@@ -620,24 +566,110 @@ export function generateWorld(config: GameConfig): GameState {
     }
   }
 
-  // Smooth coastline: any ocean hex adjacent to land becomes coast
+  // Water & Coastline Hierarchy:
+  // 1) DEEP_OCEAN can NEVER directly border any land tile. Convert water within 1-2 hexes of land to SHALLOW_COAST.
+  const isLandTile = (t: HexTile | undefined) =>
+    Boolean(t && t.biome !== 'ocean' && t.biome !== 'coast');
+
   for (const tile of Object.values(tiles)) {
     if (tile.biome === 'ocean') {
-      const hasLandNeighbor = hexNeighbors(tile.q, tile.r).some((n) => {
+      const dist1Land = hexNeighbors(tile.q, tile.r).some((n) =>
+        isLandTile(tiles[tileKey(n.q, n.r)])
+      );
+      if (dist1Land) {
+        tile.biome = 'coast';
+      }
+    }
+  }
+  // Second ring (2 tiles from land) forms natural shallow shelf bays
+  for (const tile of Object.values(tiles)) {
+    if (tile.biome === 'ocean') {
+      const adjCoastBorderingLand = hexNeighbors(tile.q, tile.r).some((n) => {
         const nt = tiles[tileKey(n.q, n.r)];
-        return nt && nt.biome !== 'ocean' && nt.biome !== 'coast';
+        if (!nt || nt.biome !== 'coast') return false;
+        return hexNeighbors(nt.q, nt.r).some((n2) => isLandTile(tiles[tileKey(n2.q, n2.r)]));
       });
-      if (hasLandNeighbor) {
+      if (adjCoastBorderingLand && tile.elevation > 0.25) {
         tile.biome = 'coast';
       }
     }
   }
 
-  // Generate winding downhill rivers from highlands/mountains to coast
+  // Detect enclosed inland lakes (small connected water components <= 7 hexes not touching map border)
+  const visitedWater = new Set<string>();
+  for (const tile of Object.values(tiles)) {
+    if (tile.biome !== 'ocean' && tile.biome !== 'coast') continue;
+    const sk = tileKey(tile.q, tile.r);
+    if (visitedWater.has(sk)) continue;
+    const comp: HexTile[] = [];
+    const wq: HexTile[] = [tile];
+    visitedWater.add(sk);
+    let touchesEdge = false;
+    while (wq.length > 0) {
+      const cur = wq.shift()!;
+      comp.push(cur);
+      const nbs = hexNeighbors(cur.q, cur.r);
+      if (nbs.some((n) => !tiles[tileKey(n.q, n.r)])) {
+        touchesEdge = true;
+      }
+      for (const n of nbs) {
+        const nk = tileKey(n.q, n.r);
+        const nt = tiles[nk];
+        if (nt && (nt.biome === 'ocean' || nt.biome === 'coast') && !visitedWater.has(nk)) {
+          visitedWater.add(nk);
+          wq.push(nt);
+        }
+      }
+    }
+    if (!touchesEdge && comp.length <= 7) {
+      for (const wt of comp) {
+        wt.biome = 'coast';
+        wt.isLake = true;
+      }
+    }
+  }
+
+  // Gradual Biome Transition Matrix (No abrupt desert-to-jungle or tundra-to-temperate jumps)
+  for (let pass = 0; pass < 2; pass++) {
+    for (const tile of Object.values(tiles)) {
+      if (tile.biome === 'ocean' || tile.biome === 'coast' || tile.biome === 'mountain') continue;
+      const nTiles = hexNeighbors(tile.q, tile.r)
+        .map((n) => tiles[tileKey(n.q, n.r)])
+        .filter((nt): nt is HexTile => Boolean(nt && isLandTile(nt)));
+
+      if (tile.biome === 'desert') {
+        const bordersLush = nTiles.some(
+          (nt) => nt.biome === 'forest' && (nt.temperature === 'tropical' || nt.temperature === 'temperate')
+        );
+        if (bordersLush) {
+          tile.biome = 'plains'; // Savanna / Arid Steppe buffer
+          tile.temperature = 'arid';
+          tile.terrainSubType = 'savanna';
+        }
+      } else if (tile.biome === 'tundra') {
+        const bordersWarm = nTiles.some(
+          (nt) =>
+            (nt.biome === 'plains' && nt.temperature !== 'arctic') ||
+            nt.biome === 'desert' ||
+            nt.temperature === 'tropical'
+        );
+        if (bordersWarm) {
+          tile.biome = 'forest'; // Boreal Taiga buffer
+          tile.temperature = 'arctic';
+          tile.terrainSubType = 'boreal_taiga';
+        }
+      }
+    }
+  }
+
+  // Generate winding downhill rivers along hex edges from highlands/mountains to coast or inland lakes
   generateRivers(tiles, rng, config.mapSize);
 
   // Generate multi-tile coastal clusters & diverse shoreline types (sandy beaches, rocky shores, high cliffs, coastal swamps, coral reefs, icy shores)
   generateShorelinesAndCoastalClusters(tiles, height, rng, config.mapSize);
+
+  // Assign deterministic terrainSubType & 6-neighbor coastBitmask (0..63) for every tile
+  finalizeTileRenderMetadata(tiles, height);
 
   // Place 2-4 Natural Wonders on scenic land tiles
   const wonderCount = config.mapSize === 'large' ? 4 : config.mapSize === 'medium' ? 3 : 2;
@@ -1138,10 +1170,15 @@ function generateShorelinesAndCoastalClusters(
 ) {
   const coastTiles = Object.values(tiles).filter((t) => t.biome === 'coast');
 
-  // 1. Stamp Multi-Tile Coral Reef Lagoon & Atoll Clusters in warm coastal waters
+  // 1. Stamp Multi-Tile Coral Reef Lagoon & Atoll Clusters in warm coastal waters adjacent to land
   const warmCoastCandidates = coastTiles.filter((t) => {
+    if (t.isLake) return false;
     const lat = Math.abs(t.r / Math.max(1, height - 1) - 0.5) * 2;
-    return lat < 0.38;
+    if (lat >= 0.38) return false;
+    return hexNeighbors(t.q, t.r).some((n) => {
+      const nt = tiles[tileKey(n.q, n.r)];
+      return nt && nt.biome !== 'ocean' && nt.biome !== 'coast';
+    });
   });
   const coralClusterTarget = mapSize === 'large' ? 4 : mapSize === 'medium' ? 3 : 2;
   const coralCenters: HexTile[] = [];
@@ -1284,5 +1321,62 @@ function generateShorelinesAndCoastalClusters(
         ct.shoreline = coastNeighbors[0].shoreline;
       }
     }
+  }
+}
+
+function finalizeTileRenderMetadata(tiles: Record<string, HexTile>, height: number) {
+  for (const tile of Object.values(tiles)) {
+    // 6-bit neighbor mask (bits 0..5 correspond to EDGE_OFFSETS 0..5):
+    // For land tiles: bit i = 1 if neighbor i is water (ocean or coast).
+    // For water tiles: bit i = 1 if neighbor i is land.
+    const isWater = tile.biome === 'ocean' || tile.biome === 'coast';
+    let mask = 0;
+    for (let e = 0; e < 6; e++) {
+      const [dq, dr] = EDGE_OFFSETS[e];
+      const nt = tiles[tileKey(tile.q + dq, tile.r + dr)];
+      if (!nt) continue;
+      const nIsWater = nt.biome === 'ocean' || nt.biome === 'coast';
+      if (isWater ? !nIsWater : nIsWater) {
+        mask |= 1 << e;
+      }
+    }
+    tile.coastBitmask = mask;
+
+    // Assign rich TerrainSubType for continuous ground splatting & 2.5D feature selection
+    let sub: TerrainSubType = 'plains';
+    if (tile.biome === 'ocean') {
+      sub = 'deep_ocean';
+    } else if (tile.biome === 'coast') {
+      sub = tile.isLake ? 'lake' : 'shallow_coast';
+    } else if (tile.biome === 'mountain') {
+      sub = 'mountain_peak';
+    } else if (tile.biome === 'hills') {
+      sub = tile.clusterRole === 'outer_ring' ? 'foothills' : 'hills';
+    } else if (tile.biome === 'tundra') {
+      const lat = Math.abs(tile.r / Math.max(1, height - 1) - 0.5) * 2;
+      sub = lat >= 0.84 || tile.elevation > 0.62 ? 'snow' : 'tundra';
+    } else if (tile.biome === 'desert') {
+      const m = tile.moisture ?? 0.25;
+      sub = m > 0.34 ? 'arid_steppe' : 'desert';
+    } else if (tile.biome === 'forest') {
+      if (tile.temperature === 'tropical') sub = 'jungle';
+      else if (tile.temperature === 'arctic') sub = 'boreal_taiga';
+      else sub = 'lush_forest';
+    } else if (tile.biome === 'plains') {
+      if (
+        tile.shoreline === 'coastal_swamp' &&
+        tile.elevation < 0.54 &&
+        (tile.moisture ?? 0.5) > 0.55
+      ) {
+        sub = 'marsh';
+      } else if (tile.temperature === 'arid') {
+        sub = 'savanna';
+      } else if ((tile.moisture ?? 0.5) >= 0.45 && tile.temperature === 'temperate') {
+        sub = 'grassland';
+      } else {
+        sub = 'plains';
+      }
+    }
+    tile.terrainSubType = sub;
   }
 }

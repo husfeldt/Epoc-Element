@@ -15,6 +15,25 @@ export type BiomeType =
   | 'desert'
   | 'tundra';
 
+export type TerrainSubType =
+  | 'deep_ocean'
+  | 'shallow_coast'
+  | 'lake'
+  | 'desert'
+  | 'arid_steppe'
+  | 'savanna'
+  | 'plains'
+  | 'grassland'
+  | 'lush_forest'
+  | 'jungle'
+  | 'boreal_taiga'
+  | 'tundra'
+  | 'snow'
+  | 'marsh'
+  | 'foothills'
+  | 'hills'
+  | 'mountain_peak';
+
 export type ShorelineType =
   | 'none'
   | 'sandy_beach'
@@ -163,6 +182,10 @@ export interface HexTile {
   visibleTo: Record<string, boolean>; // civId -> currently visible
   riverEdges?: boolean[];
   shoreline?: ShorelineType;
+  moisture?: number; // 0..1
+  isLake?: boolean;
+  terrainSubType?: TerrainSubType;
+  coastBitmask?: number; // 0..63 6-neighbor water/land mask
   clusterType?:
     | 'oasis'
     | 'mountain_massif'
