@@ -145,7 +145,8 @@ function chromaKeyAndTightCrop(
   sx: number,
   sy: number,
   sw: number,
-  sh: number
+  sh: number,
+  preserveInteriorWhite = false
 ): HTMLCanvasElement | null {
   const w = Math.max(1, Math.floor(sw));
   const h = Math.max(1, Math.floor(sh));
@@ -158,6 +159,141 @@ function chromaKeyAndTightCrop(
   ctx.drawImage(srcCanvas, sx, sy, sw, sh, 0, 0, w, h);
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
+
+  if (preserveInteriorWhite) {
+    // Border-connected flood fill so interior white sandbars, surf foam, and snow slopes stay solid
+    const isBgCand = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = (y * w + x) * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        const a = data[idx + 3];
+        if (a < 16) {
+          isBgCand[y * w + x] = 1;
+          continue;
+        }
+        const maxC = Math.max(r, g, b);
+        const minC = Math.min(r, g, b);
+        const sat = maxC - minC;
+        const lum = r * 0.299 + g * 0.587 + b * 0.114;
+        if (lum > 224 && sat < 22) {
+          isBgCand[y * w + x] = 1;
+        }
+      }
+    }
+
+    const bgMask = new Uint8Array(w * h);
+    const q = new Int32Array(w * h);
+    let qHead = 0;
+    let qTail = 0;
+    const pushIfCand = (x: number, y: number) => {
+      const p = y * w + x;
+      if (!bgMask[p] && isBgCand[p]) {
+        bgMask[p] = 1;
+        q[qTail++] = p;
+      }
+    };
+
+    for (let x = 0; x < w; x++) {
+      pushIfCand(x, 0);
+      pushIfCand(x, h - 1);
+    }
+    for (let y = 0; y < h; y++) {
+      pushIfCand(0, y);
+      pushIfCand(w - 1, y);
+    }
+
+    while (qHead < qTail) {
+      const p = q[qHead++];
+      const py = Math.floor(p / w);
+      const px = p - py * w;
+      if (px > 0) pushIfCand(px - 1, py);
+      if (px < w - 1) pushIfCand(px + 1, py);
+      if (py > 0) pushIfCand(px, py - 1);
+      if (py < h - 1) pushIfCand(px, py + 1);
+    }
+
+    const colInk = new Int32Array(w);
+    const rowInk = new Int32Array(h);
+
+    for (let y = 0; y < h; y++) {
+      const inCanopyZone = y < h * 0.34;
+      for (let x = 0; x < w; x++) {
+        const p = y * w + x;
+        const idx = p * 4;
+        if (bgMask[p]) {
+          data[idx + 3] = 0;
+          continue;
+        }
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        const maxC = Math.max(r, g, b);
+        const minC = Math.min(r, g, b);
+        const sat = maxC - minC;
+        const lum = r * 0.299 + g * 0.587 + b * 0.114;
+
+        // Clear trapped pure-white sky holes between upper tree fronds/branches
+        if (inCanopyZone && lum > 244 && sat < 10) {
+          data[idx + 3] = 0;
+          continue;
+        }
+
+        // Soften 1px anti-aliased halo directly adjacent to exterior background
+        const touchesBg =
+          (x > 0 && bgMask[p - 1]) ||
+          (x < w - 1 && bgMask[p + 1]) ||
+          (y > 0 && bgMask[p - w]) ||
+          (y < h - 1 && bgMask[p + w]);
+        if (touchesBg && lum > 208 && sat < 24) {
+          const t = Math.max(0, Math.min(1, (228 - lum) / 20));
+          data[idx + 3] = Math.round(data[idx + 3] * t);
+        }
+
+        if (data[idx + 3] > 48) {
+          if (y >= h * 0.18 && y <= h * 0.85) {
+            colInk[x]++;
+          }
+          rowInk[y]++;
+        }
+      }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+
+    const minColInk = Math.max(12, Math.round(h * 0.05));
+    let minX = w;
+    let maxX = -1;
+    for (let x = 0; x < w; x++) {
+      if (colInk[x] >= minColInk) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+      }
+    }
+    let minY = h;
+    let maxY = -1;
+    for (let y = 0; y < h; y++) {
+      if (rowInk[y] >= 4) {
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+
+    if (maxX < minX || maxY < minY) return null;
+    const cw = maxX - minX + 1;
+    const ch = maxY - minY + 1;
+    if (cw < 16 || ch < 16) return null;
+
+    const out = document.createElement('canvas');
+    out.width = cw;
+    out.height = ch;
+    const octx = out.getContext('2d');
+    if (!octx) return null;
+    octx.drawImage(temp, minX, minY, cw, ch, 0, 0, cw, ch);
+    return out;
+  }
 
   let minX = w;
   let minY = h;
@@ -224,93 +360,157 @@ function chromaKeyAndTightCrop(
   return out;
 }
 
+function resolveSpriteSurfaceGeometry(
+  slotId: AtlasSlotId,
+  col: number,
+  row: number
+): { cliffRatio: number; surfHRatio: number } {
+  if (slotId === 'desert_hills_transitions') {
+    return { cliffRatio: 0.25, surfHRatio: 0.81 };
+  }
+  if (slotId === 'coastal_shores') {
+    if (row === 1 && (col === 0 || col === 2 || col === 3)) {
+      return { cliffRatio: 0.33, surfHRatio: 0.54 };
+    }
+    return { cliffRatio: 0.27, surfHRatio: 0.58 };
+  }
+  if (slotId === 'specialty_clusters') {
+    if (row === 1 && (col === 0 || col === 1)) {
+      return { cliffRatio: 0.15, surfHRatio: 0.74 };
+    }
+    return { cliffRatio: 0.21, surfHRatio: 0.72 };
+  }
+  if (slotId === 'temperate') {
+    return { cliffRatio: 0.25, surfHRatio: 0.72 };
+  }
+  if (slotId === 'arid') {
+    return { cliffRatio: 0.19, surfHRatio: 0.72 };
+  }
+  if (slotId === 'arctic') {
+    return { cliffRatio: 0.15, surfHRatio: 0.68 };
+  }
+  if (slotId === 'transitions') {
+    return { cliffRatio: 0.14, surfHRatio: 0.70 };
+  }
+  if (slotId === 'infrastructure') {
+    return { cliffRatio: 0.15, surfHRatio: 0.68 };
+  }
+  return { cliffRatio: 0.22, surfHRatio: 0.68 };
+}
+
 /**
- * Strips the bottom isometric soil cliff skirt from a tight-cropped 3D hex block
- * and gently feathers the lower hex diamond perimeter so the 3D trees/hills/mountains/
- * buildings sit seamlessly on the mathematically aligned connected terrain layer.
+ * Strips the 3D underground/underwater cliff skirt from an isometric tile block and
+ * maps its base surface directly into the exact 6-sided pointy-top hexagon geometry
+ * of the game grid (ISO_Y_SCALE = 0.56), while preserving 3D vertical headroom above
+ * the top hex edges for mountain peaks, forest canopies, palms, and city spires.
  */
-function buildSeamlessDioramaSprite(raw: HTMLCanvasElement): {
+function buildSeamlessDioramaSprite(
+  raw: HTMLCanvasElement,
+  slotId: AtlasSlotId = 'temperate',
+  col = 0,
+  row = 0
+): {
   canvas: HTMLCanvasElement;
   height: number;
 } {
-  const w = raw.width;
-  const h = raw.height;
+  const rw = raw.width;
+  const rh = raw.height;
   const rctx = raw.getContext('2d', { willReadFrequently: true });
-  let detectedCliff = Math.round(w * 0.21);
+  if (!rctx) return { canvas: raw, height: rh };
 
-  if (rctx) {
-    const rawData = rctx.getImageData(0, 0, w, h).data;
-    const measureSideSpan = (sx: number) => {
-      const x = Math.max(0, Math.min(w - 1, sx));
-      let topY = -1;
-      let botY = -1;
-      for (let y = Math.round(h * 0.15); y < h; y++) {
-        const a = rawData[(y * w + x) * 4 + 3];
-        if (a > 64) {
-          if (topY === -1) topY = y;
-          botY = y;
-        }
-      }
-      return topY !== -1 && botY > topY ? botY - topY : 0;
-    };
-    const leftSpan = measureSideSpan(Math.round(w * 0.035));
-    const rightSpan = measureSideSpan(Math.round(w * 0.965));
-    const avgSpan = (leftSpan + rightSpan) * 0.5;
-    if (avgSpan > w * 0.11 && avgSpan < w * 0.34) {
-      detectedCliff = Math.round(avgSpan * 0.96);
-    }
-  }
+  const rawData = rctx.getImageData(0, 0, rw, rh).data;
+  const { cliffRatio, surfHRatio } = resolveSpriteSurfaceGeometry(slotId, col, row);
 
-  const cliffCut = Math.max(8, Math.min(Math.round(w * 0.29), detectedCliff));
-  const surfaceBottomY = Math.max(Math.round(h * 0.52), h - cliffCut);
-  const outH = Math.min(h, surfaceBottomY + 1);
-  // Mathematical semi-height of the pointy-top isometric hex diamond
-  const hexSemiH = (w / Math.sqrt(3)) * 0.56;
-  const hexCenterY = outH - hexSemiH;
+  // Target game-grid pointy-top hexagon dimensions for width W = rw (ISO_Y_SCALE = 0.56)
+  const W = rw;
+  const hexH = Math.max(16, Math.round(W * ((2 * 0.56) / Math.sqrt(3)))); // 0.64663 * W
+  const headroom = Math.round(W * 0.54);
+  const outH = headroom + hexH;
+
+  const surfBot0 = Math.min(rh - 2, rh - rw * cliffRatio);
+  const surfTop0 = Math.max(0, surfBot0 - rw * surfHRatio);
+  const slopeTop = 0.232 * rw;
+  const slopeBot = 0.232 * rw;
+  const centerX = Math.floor(rw / 2);
 
   const out = document.createElement('canvas');
-  out.width = w;
+  out.width = W;
   out.height = outH;
-  const ctx = out.getContext('2d', { willReadFrequently: true });
-  if (!ctx) return { canvas: raw, height: h };
+  const ctx = out.getContext('2d');
+  if (!ctx) return { canvas: raw, height: rh };
 
-  ctx.drawImage(raw, 0, 0, w, outH, 0, 0, w, outH);
-  const imgData = ctx.getImageData(0, 0, w, outH);
-  const data = imgData.data;
+  const outImg = ctx.createImageData(W, outH);
+  const outData = outImg.data;
+  const halfW = (W - 1) * 0.5;
 
-  const halfW = w * 0.5;
-  for (let y = 0; y < outH; y++) {
-    for (let x = 0; x < w; x++) {
-      const idx = (y * w + x) * 4;
-      const a = data[idx + 3];
-      if (a === 0) continue;
+  for (let xOut = 0; xOut < W; xOut++) {
+    const nx = Math.abs(xOut - halfW) / Math.max(1, halfW);
+    const nxClamped = Math.min(0.93, nx);
+    const sgn = xOut < halfW ? -1 : 1;
+    let baseXSrc = Math.round(halfW + sgn * nxClamped * halfW);
+    baseXSrc = Math.max(0, Math.min(rw - 1, baseXSrc));
 
-      // Normalized offset from top hex diamond center
-      const nx = Math.abs(x - halfW) / Math.max(1, halfW); // 0 at center, 1 at left/right corner
-      // Bottom V-edge of the isometric hex diamond: at nx=0 -> y = outH - 1; at nx=1 -> y = outH - 1 - hexSemiH * 0.5
-      const bottomHexEdgeY = outH - 1 - nx * (hexSemiH * 0.52);
+    // Exact top and bottom y of the 6-sided pointy-top hexagon at normalized column nx
+    const tTop = headroom + nx * (0.25 * hexH);
+    const tBot = headroom + hexH - nx * (0.25 * hexH);
 
-      if (y > bottomHexEdgeY) {
-        // Below the top surface's bottom rim -> soil cliff wall -> erase cleanly!
-        data[idx + 3] = 0;
+    // Smooth geometric source top and bottom (never jumps between adjacent columns)
+    const sTop = surfTop0 + nxClamped * slopeTop;
+    const sBot = surfBot0 - nxClamped * slopeBot;
+
+    // Gentle 2.5px side feather at the extreme left/right vertical hex edges
+    const sideFeather = nx > 0.965 ? Math.max(0.25, (1.0 - nx) / 0.035) : 1.0;
+
+    for (let yOut = 0; yOut < outH; yOut++) {
+      if (yOut > tBot) {
         continue;
       }
 
-      // Softly feather the lower & side hex perimeter so adjacent tile terrains connect smoothly
-      // over the cross-blended ground plane with zero hard block borders.
-      const dy = y - hexCenterY;
-      const hexDist = Math.max(nx, nx * 0.5 + Math.abs(dy) / Math.max(1, hexSemiH));
-      if (dy > -hexSemiH * 0.28 && hexDist > 0.72) {
-        const edgeFade = Math.max(0, Math.min(1, (0.97 - hexDist) / 0.25));
-        data[idx + 3] = Math.round(a * edgeFade * edgeFade);
-      } else if (hexDist > 0.88 && y > hexCenterY - hexSemiH * 0.75) {
-        const rimFade = Math.max(0, Math.min(1, (0.99 - hexDist) / 0.11));
-        data[idx + 3] = Math.round(a * rimFade);
+      if (yOut >= tTop) {
+        const t = (yOut - tTop) / Math.max(1, tBot - tTop);
+        const ySrc = sTop + t * (sBot - sTop);
+        const yi = Math.max(0, Math.min(rh - 1, Math.round(ySrc)));
+
+        let xs = baseXSrc;
+        let steps = 0;
+        while (xs !== centerX && rawData[(yi * rw + xs) * 4 + 3] < 96 && steps < 14) {
+          xs += xs < centerX ? 1 : -1;
+          steps++;
+        }
+
+        const srcIdx = (yi * rw + xs) * 4;
+        const a = rawData[srcIdx + 3];
+        if (a === 0) continue;
+
+        // Soft 3px feather along bottom hex edges so tiles sit seamlessly on the terrain plane
+        const botDist = tBot - yOut;
+        const botFeather = botDist < 3.0 ? Math.max(0.2, botDist / 3.0) : 1.0;
+
+        const dstIdx = (yOut * W + xOut) * 4;
+        outData[dstIdx] = rawData[srcIdx];
+        outData[dstIdx + 1] = rawData[srcIdx + 1];
+        outData[dstIdx + 2] = rawData[srcIdx + 2];
+        outData[dstIdx + 3] = Math.round(a * sideFeather * botFeather);
+      } else {
+        // 3D vertical headroom above top hex edges (mountains, trees, palms, city spires)
+        const ySrc = sTop - (tTop - yOut);
+        const yi = Math.round(ySrc);
+        if (yi >= 0 && yi < rh) {
+          const srcIdx = (yi * rw + baseXSrc) * 4;
+          const a = rawData[srcIdx + 3];
+          if (a > 64) {
+            const dstIdx = (yOut * W + xOut) * 4;
+            outData[dstIdx] = rawData[srcIdx];
+            outData[dstIdx + 1] = rawData[srcIdx + 1];
+            outData[dstIdx + 2] = rawData[srcIdx + 2];
+            outData[dstIdx + 3] = Math.round(a * sideFeather);
+          }
+        }
       }
     }
   }
 
-  ctx.putImageData(imgData, 0, 0);
+  ctx.putImageData(outImg, 0, 0);
   return { canvas: out, height: outH };
 }
 
@@ -318,7 +518,8 @@ function sliceGridSheet(
   srcCanvas: HTMLCanvasElement,
   cols: number,
   rows: number,
-  buildDiorama: boolean
+  buildDiorama: boolean,
+  slotId: AtlasSlotId = 'temperate'
 ): SlicedSprite[] {
   const cellW = srcCanvas.width / cols;
   const cellH = srcCanvas.height / rows;
@@ -330,9 +531,9 @@ function sliceGridSheet(
       const sy = Math.floor(row * cellH);
       const sw = Math.floor((col + 1) * cellW) - sx;
       const sh = Math.floor((row + 1) * cellH) - sy;
-      const cropped = chromaKeyAndTightCrop(srcCanvas, sx, sy, sw, sh);
+      const cropped = chromaKeyAndTightCrop(srcCanvas, sx, sy, sw, sh, buildDiorama);
       if (cropped) {
-        const diorama = buildDiorama ? buildSeamlessDioramaSprite(cropped) : null;
+        const diorama = buildDiorama ? buildSeamlessDioramaSprite(cropped, slotId, col, row) : null;
         sprites.push({
           canvas: cropped,
           dioramaCanvas: diorama?.canvas,
@@ -509,9 +710,9 @@ function sliceTropicalColumnSheet(
       const sy = Math.max(0, box.minY - 2);
       const sw = Math.min(W - sx, box.maxX - box.minX + 5);
       const sh = Math.min(H - sy, box.maxY - box.minY + 5);
-      const cropped = chromaKeyAndTightCrop(srcCanvas, sx, sy, sw, sh);
+      const cropped = chromaKeyAndTightCrop(srcCanvas, sx, sy, sw, sh, true);
       if (cropped) {
-        const diorama = buildSeamlessDioramaSprite(cropped);
+        const diorama = buildSeamlessDioramaSprite(cropped, 'tropical', col, rowIdx);
         sprites.push({
           canvas: cropped,
           dioramaCanvas: diorama.canvas,
@@ -542,7 +743,7 @@ async function buildLoadedAtlas(meta: AtlasSlotMeta): Promise<LoadedAtlas> {
   const sprites =
     meta.sliceMode === 'tropical_columns'
       ? sliceTropicalColumnSheet(srcCanvas, meta.cols)
-      : sliceGridSheet(srcCanvas, meta.cols, meta.rows, isTileOrInfra);
+      : sliceGridSheet(srcCanvas, meta.cols, meta.rows, isTileOrInfra, meta.id);
 
   const byCol = new Map<number, SlicedSprite[]>();
   const byCoord = new Map<string, SlicedSprite>();

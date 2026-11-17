@@ -16,7 +16,6 @@ import {
   getTerrainTileSprite,
   getUnitMiniatureSprite,
   isBiomeTransitionTile,
-  isHighSovereignPeak,
   isOasisCenterTile,
   resolveTileShoreline,
   spriteAtlas,
@@ -92,6 +91,10 @@ const NEIGHBOR_OFFSETS: Array<[number, number]> = [
 const BATTLE_FX_DURATION_MS = 850;
 const DISASTER_FX_DURATION_MS = 2800;
 const UNIT_STEP_DURATION_MS = 215;
+
+const MIN_ZOOM = 0.35;
+const MAX_ZOOM = 4.2;
+const ZOOM_STEP = 0.25;
 
 interface UnitMoveAnim {
   waypoints: Array<{ q: number; r: number }>;
@@ -353,7 +356,7 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
   }, [cameraTarget, viewMode]);
 
   const adjustZoom = useCallback((delta: number) => {
-    const next = Math.max(0.42, Math.min(2.3, cameraRef.current.zoom + delta));
+    const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, cameraRef.current.zoom + delta));
     cameraRef.current.zoom = next;
     setZoomDisplay(Math.round(next * 100));
     setRenderTick((v) => v + 1);
@@ -380,8 +383,8 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
         cameraRef.current.x += step;
         moved = true;
       }
-      if (e.key === '=' || e.key === '+') adjustZoom(0.18);
-      if (e.key === '-') adjustZoom(-0.18);
+      if (e.key === '=' || e.key === '+') adjustZoom(ZOOM_STEP);
+      if (e.key === '-') adjustZoom(-ZOOM_STEP);
       if (moved) setRenderTick((v) => v + 1);
     };
     window.addEventListener('keydown', onKeyDown);
@@ -829,15 +832,9 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       }
 
       if (isIso && dioramaSprite && dioramaSprite.dioramaCanvas) {
-        const isSovereignMtn =
-          !cityOnTile && tile.biome === 'mountain' && isHighSovereignPeak(tile, state.tiles);
-        const isSubMtn = !cityOnTile && tile.biome === 'mountain' && !isSovereignMtn;
-        const widthMult = isSovereignMtn ? 1.08 : isSubMtn ? 0.96 : 1.0;
-        const heightMult = isSovereignMtn ? 1.15 : isSubMtn ? 0.92 : 1.0;
-
-        const targetW = hexDrawWidth * widthMult;
+        const targetW = HEX_SIZE * HEX_SQRT3 * 1.006;
         const scale = targetW / dioramaSprite.width;
-        const drawH = (dioramaSprite.dioramaHeight ?? dioramaSprite.height) * scale * heightMult;
+        const drawH = (dioramaSprite.dioramaHeight ?? dioramaSprite.height) * scale;
         const bottomDiamondY = py + HEX_SIZE * yScale;
         const drawX = px - targetW / 2;
         const drawY = bottomDiamondY - drawH;
@@ -1212,9 +1209,9 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.1 : 0.91;
+    const factor = e.deltaY < 0 ? 1.12 : 0.89;
     const prevZoom = cameraRef.current.zoom;
-    const nextZoom = Math.max(0.42, Math.min(2.3, prevZoom * factor));
+    const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prevZoom * factor));
 
     const canvas = canvasRef.current;
     if (canvas) {
@@ -1253,7 +1250,7 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
 
         <div className="flex items-center gap-1 bg-[#0d1a24]/92 backdrop-blur-md border border-[#b89758]/40 rounded-lg p-1 shadow-lg">
           <button
-            onClick={() => adjustZoom(-0.2)}
+            onClick={() => adjustZoom(-ZOOM_STEP)}
             className="px-2.5 py-1 text-xs font-medium text-[#f8f3e6] hover:bg-white/10 rounded transition-colors cursor-pointer"
             title="Zoom Out (-)"
           >
@@ -1263,7 +1260,7 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
             {zoomDisplay}%
           </span>
           <button
-            onClick={() => adjustZoom(0.2)}
+            onClick={() => adjustZoom(ZOOM_STEP)}
             className="px-2.5 py-1 text-xs font-medium text-[#f8f3e6] hover:bg-white/10 rounded transition-colors cursor-pointer"
             title="Zoom In (+)"
           >
