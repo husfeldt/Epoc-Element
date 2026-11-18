@@ -1,0 +1,3310 @@
+{
+  "total": 188,
+  "passed": 183,
+  "failed": 5,
+  "failedItems": [
+    {
+      "id": "mountain_peak_01",
+      "passed": false,
+      "reasons": [
+        "White artifacts (2.26% > 0.20%)"
+      ],
+      "whiteRatio": 0.02259,
+      "diamondR2": [
+        0.508,
+        0.507
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 292,
+      "file": "/assets/sprites/mountain_peak_01.png"
+    },
+    {
+      "id": "desert_dunes_02",
+      "passed": false,
+      "reasons": [
+        "4-sided diamond pedestal detected (R2=0.993/0.994)"
+      ],
+      "whiteRatio": 4e-05,
+      "diamondR2": [
+        0.993,
+        0.994
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 420,
+      "height": 253,
+      "file": "/assets/sprites/desert_dunes_02.png"
+    },
+    {
+      "id": "mountain_range_wide_05",
+      "passed": false,
+      "reasons": [
+        "4-sided diamond pedestal detected (R2=0.991/0.992)"
+      ],
+      "whiteRatio": 0.0001,
+      "diamondR2": [
+        0.991,
+        0.992
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 235,
+      "file": "/assets/sprites/mountain_range_wide_05.png"
+    },
+    {
+      "id": "decal_meadow_wildflowers_01",
+      "passed": false,
+      "reasons": [
+        "4-sided diamond pedestal detected (R2=0.964/0.965)"
+      ],
+      "whiteRatio": 0.00027,
+      "diamondR2": [
+        0.964,
+        0.965
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 241,
+      "file": "/assets/sprites/decal_meadow_wildflowers_01.png"
+    },
+    {
+      "id": "scrub_dunes_01",
+      "passed": false,
+      "reasons": [
+        "4-sided diamond pedestal detected (R2=0.985/0.978)"
+      ],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.985,
+        0.978
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 268,
+      "file": "/assets/sprites/scrub_dunes_01.png"
+    }
+  ],
+  "results": [
+    {
+      "id": "mountain_range_wide_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00081,
+      "diamondR2": [
+        0.554,
+        0.554
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 211,
+      "file": "/assets/sprites/mountain_range_wide_01.png"
+    },
+    {
+      "id": "ancient_ruins_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0001,
+      "diamondR2": [
+        0.529,
+        0.532
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 283,
+      "file": "/assets/sprites/ancient_ruins_01.png"
+    },
+    {
+      "id": "mountain_range_wide_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00019,
+      "diamondR2": [
+        0.166,
+        0.148
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 235,
+      "file": "/assets/sprites/mountain_range_wide_02.png"
+    },
+    {
+      "id": "mountain_range_wide_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 3e-05,
+      "diamondR2": [
+        0.462,
+        0.46
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 235,
+      "file": "/assets/sprites/mountain_range_wide_03.png"
+    },
+    {
+      "id": "mountain_peak_01",
+      "passed": false,
+      "reasons": [
+        "White artifacts (2.26% > 0.20%)"
+      ],
+      "whiteRatio": 0.02259,
+      "diamondR2": [
+        0.508,
+        0.507
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 292,
+      "file": "/assets/sprites/mountain_peak_01.png"
+    },
+    {
+      "id": "mountain_peak_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.5,
+        0.5
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 294,
+      "file": "/assets/sprites/mountain_peak_02.png"
+    },
+    {
+      "id": "mountain_peak_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.517,
+        0.517
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 288,
+      "file": "/assets/sprites/mountain_peak_03.png"
+    },
+    {
+      "id": "foothills_rocky_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 3e-05,
+      "diamondR2": [
+        0.919,
+        0.932
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 185,
+      "file": "/assets/sprites/foothills_rocky_01.png"
+    },
+    {
+      "id": "foothills_rocky_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 6e-05,
+      "diamondR2": [
+        0.851,
+        0.869
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 191,
+      "file": "/assets/sprites/foothills_rocky_02.png"
+    },
+    {
+      "id": "foothills_rocky_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 6e-05,
+      "diamondR2": [
+        0.255,
+        0.976
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 236,
+      "file": "/assets/sprites/foothills_rocky_03.png"
+    },
+    {
+      "id": "desert_dunes_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 3e-05,
+      "diamondR2": [
+        0.494,
+        0.508
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 297,
+      "file": "/assets/sprites/desert_dunes_01.png"
+    },
+    {
+      "id": "desert_dunes_02",
+      "passed": false,
+      "reasons": [
+        "4-sided diamond pedestal detected (R2=0.993/0.994)"
+      ],
+      "whiteRatio": 4e-05,
+      "diamondR2": [
+        0.993,
+        0.994
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 420,
+      "height": 253,
+      "file": "/assets/sprites/desert_dunes_02.png"
+    },
+    {
+      "id": "desert_dunes_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 3e-05,
+      "diamondR2": [
+        0.724,
+        0.78
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 251,
+      "file": "/assets/sprites/desert_dunes_03.png"
+    },
+    {
+      "id": "forest_pine_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00011,
+      "diamondR2": [
+        1.0,
+        0.962
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 267,
+      "file": "/assets/sprites/forest_pine_01.png"
+    },
+    {
+      "id": "forest_pine_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0001,
+      "diamondR2": [
+        0.577,
+        0.734
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 258,
+      "file": "/assets/sprites/forest_pine_02.png"
+    },
+    {
+      "id": "forest_pine_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00032,
+      "diamondR2": [
+        0.934,
+        0.911
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 202,
+      "file": "/assets/sprites/forest_pine_03.png"
+    },
+    {
+      "id": "forest_pine_04",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 5e-05,
+      "diamondR2": [
+        0.048,
+        0.516
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 221,
+      "file": "/assets/sprites/forest_pine_04.png"
+    },
+    {
+      "id": "forest_deciduous_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 3e-05,
+      "diamondR2": [
+        0.888,
+        0.88
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 220,
+      "file": "/assets/sprites/forest_deciduous_01.png"
+    },
+    {
+      "id": "forest_deciduous_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.96,
+        0.936
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 195,
+      "file": "/assets/sprites/forest_deciduous_02.png"
+    },
+    {
+      "id": "forest_deciduous_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00027,
+      "diamondR2": [
+        0.879,
+        0.49
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 239,
+      "file": "/assets/sprites/forest_deciduous_03.png"
+    },
+    {
+      "id": "forest_deciduous_04",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00015,
+      "diamondR2": [
+        0.47,
+        0.472
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 235,
+      "file": "/assets/sprites/forest_deciduous_04.png"
+    },
+    {
+      "id": "jungle_canopy_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00023,
+      "diamondR2": [
+        0.283,
+        0.727
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 233,
+      "file": "/assets/sprites/jungle_canopy_01.png"
+    },
+    {
+      "id": "jungle_canopy_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00017,
+      "diamondR2": [
+        0.578,
+        0.725
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 217,
+      "file": "/assets/sprites/jungle_canopy_02.png"
+    },
+    {
+      "id": "jungle_canopy_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00012,
+      "diamondR2": [
+        0.804,
+        0.703
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 218,
+      "file": "/assets/sprites/jungle_canopy_03.png"
+    },
+    {
+      "id": "oasis_palm_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.562,
+        0.567
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 273,
+      "file": "/assets/sprites/oasis_palm_01.png"
+    },
+    {
+      "id": "oasis_palm_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00011,
+      "diamondR2": [
+        0.98,
+        0.881
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 194,
+      "file": "/assets/sprites/oasis_palm_02.png"
+    },
+    {
+      "id": "coral_shoal_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.797,
+        0.87
+      ],
+      "fill": [
+        0.99,
+        1.0
+      ],
+      "width": 280,
+      "height": 275,
+      "file": "/assets/sprites/coral_shoal_01.png"
+    },
+    {
+      "id": "coral_shoal_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00027,
+      "diamondR2": [
+        0.823,
+        0.682
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 219,
+      "file": "/assets/sprites/coral_shoal_02.png"
+    },
+    {
+      "id": "ancient_ruins_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 8e-05,
+      "diamondR2": [
+        0.868,
+        0.876
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 193,
+      "file": "/assets/sprites/ancient_ruins_02.png"
+    },
+    {
+      "id": "ancient_ruins_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 8e-05,
+      "diamondR2": [
+        0.766,
+        0.658
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 247,
+      "file": "/assets/sprites/ancient_ruins_03.png"
+    },
+    {
+      "id": "cave_entrance_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0009,
+      "diamondR2": [
+        0.522,
+        0.523
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 283,
+      "file": "/assets/sprites/cave_entrance_01.png"
+    },
+    {
+      "id": "cave_entrance_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 3e-05,
+      "diamondR2": [
+        0.321,
+        0.592
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 219,
+      "file": "/assets/sprites/cave_entrance_02.png"
+    },
+    {
+      "id": "mineral_gold_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00031,
+      "diamondR2": [
+        0.606,
+        0.611
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 276,
+      "file": "/assets/sprites/mineral_gold_01.png"
+    },
+    {
+      "id": "mineral_gold_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 5e-05,
+      "diamondR2": [
+        0.09,
+        0.056
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 292,
+      "file": "/assets/sprites/mineral_gold_02.png"
+    },
+    {
+      "id": "mineral_iron_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.874,
+        0.889
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 208,
+      "file": "/assets/sprites/mineral_iron_01.png"
+    },
+    {
+      "id": "mineral_iron_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.011,
+        0.969
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 219,
+      "file": "/assets/sprites/mineral_iron_02.png"
+    },
+    {
+      "id": "mineral_gems_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0001,
+      "diamondR2": [
+        0.498,
+        0.505
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 297,
+      "file": "/assets/sprites/mineral_gems_01.png"
+    },
+    {
+      "id": "mineral_stone_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.542,
+        0.539
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 282,
+      "file": "/assets/sprites/mineral_stone_01.png"
+    },
+    {
+      "id": "resource_horses_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0001,
+      "diamondR2": [
+        0.39,
+        0.66
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 196,
+      "file": "/assets/sprites/resource_horses_01.png"
+    },
+    {
+      "id": "resource_wheat_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 7e-05,
+      "diamondR2": [
+        0.531,
+        0.525
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 283,
+      "file": "/assets/sprites/resource_wheat_01.png"
+    },
+    {
+      "id": "resource_spices_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 5e-05,
+      "diamondR2": [
+        0.551,
+        0.548
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 279,
+      "file": "/assets/sprites/resource_spices_01.png"
+    },
+    {
+      "id": "barbarian_camp_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 4e-05,
+      "diamondR2": [
+        0.773,
+        0.896
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 275,
+      "file": "/assets/sprites/barbarian_camp_01.png"
+    },
+    {
+      "id": "barbarian_camp_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00021,
+      "diamondR2": [
+        0.464,
+        0.461
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 299,
+      "file": "/assets/sprites/barbarian_camp_02.png"
+    },
+    {
+      "id": "city_settlement_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 7e-05,
+      "diamondR2": [
+        0.708,
+        0.532
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 289,
+      "file": "/assets/sprites/city_settlement_01.png"
+    },
+    {
+      "id": "city_settlement_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00013,
+      "diamondR2": [
+        0.829,
+        0.801
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 300,
+      "file": "/assets/sprites/city_settlement_02.png"
+    },
+    {
+      "id": "mountain_arctic_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.499,
+        0.495
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 292,
+      "file": "/assets/sprites/mountain_arctic_01.png"
+    },
+    {
+      "id": "mountain_arctic_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00119,
+      "diamondR2": [
+        0.502,
+        0.512
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 294,
+      "file": "/assets/sprites/mountain_arctic_02.png"
+    },
+    {
+      "id": "mountain_temperate_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 8e-05,
+      "diamondR2": [
+        0.504,
+        0.505
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 295,
+      "file": "/assets/sprites/mountain_temperate_01.png"
+    },
+    {
+      "id": "mountain_temperate_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 7e-05,
+      "diamondR2": [
+        0.513,
+        0.514
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 289,
+      "file": "/assets/sprites/mountain_temperate_02.png"
+    },
+    {
+      "id": "mountain_temperate_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 5e-05,
+      "diamondR2": [
+        0.504,
+        0.504
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 295,
+      "file": "/assets/sprites/mountain_temperate_03.png"
+    },
+    {
+      "id": "mountain_arid_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 4e-05,
+      "diamondR2": [
+        0.598,
+        0.598
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 262,
+      "file": "/assets/sprites/mountain_arid_01.png"
+    },
+    {
+      "id": "mountain_arid_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.594,
+        0.593
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 261,
+      "file": "/assets/sprites/mountain_arid_02.png"
+    },
+    {
+      "id": "mountain_range_wide_04",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0004,
+      "diamondR2": [
+        0.461,
+        0.001
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 235,
+      "file": "/assets/sprites/mountain_range_wide_04.png"
+    },
+    {
+      "id": "mountain_range_wide_05",
+      "passed": false,
+      "reasons": [
+        "4-sided diamond pedestal detected (R2=0.991/0.992)"
+      ],
+      "whiteRatio": 0.0001,
+      "diamondR2": [
+        0.991,
+        0.992
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 235,
+      "file": "/assets/sprites/mountain_range_wide_05.png"
+    },
+    {
+      "id": "jungle_canopy_04",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00025,
+      "diamondR2": [
+        0.649,
+        0.506
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 228,
+      "height": 189,
+      "file": "/assets/sprites/jungle_canopy_04.png"
+    },
+    {
+      "id": "jungle_canopy_05",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00025,
+      "diamondR2": [
+        0.748,
+        0.697
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 239,
+      "height": 246,
+      "file": "/assets/sprites/jungle_canopy_05.png"
+    },
+    {
+      "id": "jungle_canopy_06",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00021,
+      "diamondR2": [
+        0.889,
+        0.829
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 223,
+      "height": 159,
+      "file": "/assets/sprites/jungle_canopy_06.png"
+    },
+    {
+      "id": "forest_temperate_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 6e-05,
+      "diamondR2": [
+        0.824,
+        0.849
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 219,
+      "file": "/assets/sprites/forest_temperate_01.png"
+    },
+    {
+      "id": "forest_temperate_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00016,
+      "diamondR2": [
+        0.945,
+        0.917
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 203,
+      "file": "/assets/sprites/forest_temperate_02.png"
+    },
+    {
+      "id": "forest_temperate_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0002,
+      "diamondR2": [
+        0.777,
+        0.479
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 220,
+      "file": "/assets/sprites/forest_temperate_03.png"
+    },
+    {
+      "id": "forest_temperate_04",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00027,
+      "diamondR2": [
+        0.76,
+        0.888
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 223,
+      "file": "/assets/sprites/forest_temperate_04.png"
+    },
+    {
+      "id": "forest_temperate_05",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 8e-05,
+      "diamondR2": [
+        0.866,
+        0.833
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 249,
+      "file": "/assets/sprites/forest_temperate_05.png"
+    },
+    {
+      "id": "forest_temperate_06",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00047,
+      "diamondR2": [
+        0.593,
+        0.592
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 192,
+      "file": "/assets/sprites/forest_temperate_06.png"
+    },
+    {
+      "id": "forest_arctic_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00685,
+      "diamondR2": [
+        0.679,
+        0.572
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 228,
+      "file": "/assets/sprites/forest_arctic_01.png"
+    },
+    {
+      "id": "forest_arctic_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.01151,
+      "diamondR2": [
+        0.89,
+        0.887
+      ],
+      "fill": [
+        0.99,
+        0.99
+      ],
+      "width": 240,
+      "height": 197,
+      "file": "/assets/sprites/forest_arctic_02.png"
+    },
+    {
+      "id": "forest_arctic_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.02311,
+      "diamondR2": [
+        0.758,
+        0.987
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 166,
+      "file": "/assets/sprites/forest_arctic_03.png"
+    },
+    {
+      "id": "forest_arctic_04",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00158,
+      "diamondR2": [
+        0.638,
+        0.76
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 241,
+      "file": "/assets/sprites/forest_arctic_04.png"
+    },
+    {
+      "id": "decal_rocky_scree_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.915,
+        0.926
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 222,
+      "file": "/assets/sprites/decal_rocky_scree_01.png"
+    },
+    {
+      "id": "decal_meadow_wildflowers_01",
+      "passed": false,
+      "reasons": [
+        "4-sided diamond pedestal detected (R2=0.964/0.965)"
+      ],
+      "whiteRatio": 0.00027,
+      "diamondR2": [
+        0.964,
+        0.965
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 241,
+      "file": "/assets/sprites/decal_meadow_wildflowers_01.png"
+    },
+    {
+      "id": "decal_dry_steppe_scrub_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 9e-05,
+      "diamondR2": [
+        0.928,
+        0.9
+      ],
+      "fill": [
+        1.0,
+        0.98
+      ],
+      "width": 240,
+      "height": 200,
+      "file": "/assets/sprites/decal_dry_steppe_scrub_01.png"
+    },
+    {
+      "id": "decal_desert_gravel_ripples_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.877,
+        0.903
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 211,
+      "file": "/assets/sprites/decal_desert_gravel_ripples_01.png"
+    },
+    {
+      "id": "decal_tundra_lichen_rocks_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 4e-05,
+      "diamondR2": [
+        0.961,
+        0.947
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 173,
+      "file": "/assets/sprites/decal_tundra_lichen_rocks_01.png"
+    },
+    {
+      "id": "decal_coastal_boulders_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.963,
+        0.825
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 213,
+      "file": "/assets/sprites/decal_coastal_boulders_01.png"
+    },
+    {
+      "id": "forest_arctic_clean_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.517,
+        0.494
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 283,
+      "file": "/assets/sprites/forest_arctic_clean_01.png"
+    },
+    {
+      "id": "forest_arctic_clean_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00012,
+      "diamondR2": [
+        0.867,
+        0.582
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 278,
+      "file": "/assets/sprites/forest_arctic_clean_02.png"
+    },
+    {
+      "id": "forest_arctic_clean_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 6e-05,
+      "diamondR2": [
+        0.794,
+        0.629
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 268,
+      "file": "/assets/sprites/forest_arctic_clean_03.png"
+    },
+    {
+      "id": "forest_temperate_clean_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.508,
+        0.507
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 291,
+      "file": "/assets/sprites/forest_temperate_clean_01.png"
+    },
+    {
+      "id": "forest_temperate_clean_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 3e-05,
+      "diamondR2": [
+        0.497,
+        0.497
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 294,
+      "file": "/assets/sprites/forest_temperate_clean_02.png"
+    },
+    {
+      "id": "forest_temperate_clean_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 6e-05,
+      "diamondR2": [
+        0.505,
+        0.504
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 295,
+      "file": "/assets/sprites/forest_temperate_clean_03.png"
+    },
+    {
+      "id": "forest_temperate_clean_04",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.579,
+        0.579
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 266,
+      "file": "/assets/sprites/forest_temperate_clean_04.png"
+    },
+    {
+      "id": "jungle_tropical_clean_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 5e-05,
+      "diamondR2": [
+        0.504,
+        0.504
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 295,
+      "file": "/assets/sprites/jungle_tropical_clean_01.png"
+    },
+    {
+      "id": "jungle_tropical_clean_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.499,
+        0.498
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 294,
+      "file": "/assets/sprites/jungle_tropical_clean_02.png"
+    },
+    {
+      "id": "jungle_tropical_clean_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 3e-05,
+      "diamondR2": [
+        0.511,
+        0.512
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 290,
+      "file": "/assets/sprites/jungle_tropical_clean_03.png"
+    },
+    {
+      "id": "sea_ice_floes_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.04532,
+      "diamondR2": [
+        0.25,
+        0.364
+      ],
+      "fill": [
+        0.97,
+        0.96
+      ],
+      "width": 113,
+      "height": 49,
+      "file": "/assets/sprites/sea_ice_floes_01.png"
+    },
+    {
+      "id": "sea_ice_floes_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00618,
+      "diamondR2": [
+        0.208,
+        0.02
+      ],
+      "fill": [
+        0.98,
+        0.95
+      ],
+      "width": 112,
+      "height": 40,
+      "file": "/assets/sprites/sea_ice_floes_02.png"
+    },
+    {
+      "id": "arctic_sea_stack_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.01454,
+      "diamondR2": [
+        0.528,
+        0.914
+      ],
+      "fill": [
+        0.99,
+        0.99
+      ],
+      "width": 280,
+      "height": 236,
+      "file": "/assets/sprites/arctic_sea_stack_01.png"
+    },
+    {
+      "id": "coastal_rock_outcrops_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0003,
+      "diamondR2": [
+        0.521,
+        0.526
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 283,
+      "file": "/assets/sprites/coastal_rock_outcrops_01.png"
+    },
+    {
+      "id": "coastal_rock_outcrops_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.688,
+        0.808
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 255,
+      "file": "/assets/sprites/coastal_rock_outcrops_02.png"
+    },
+    {
+      "id": "kelp_shoals_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00012,
+      "diamondR2": [
+        0.801,
+        0.697
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 287,
+      "file": "/assets/sprites/kelp_shoals_01.png"
+    },
+    {
+      "id": "coral_reef_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00015,
+      "diamondR2": [
+        0.897,
+        0.901
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 276,
+      "file": "/assets/sprites/coral_reef_01.png"
+    },
+    {
+      "id": "coral_reef_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.74,
+        0.78
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 272,
+      "file": "/assets/sprites/coral_reef_02.png"
+    },
+    {
+      "id": "tropical_sand_cay_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.798,
+        0.819
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 278,
+      "file": "/assets/sprites/tropical_sand_cay_01.png"
+    },
+    {
+      "id": "forest_edge_temperate_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00063,
+      "diamondR2": [
+        0.561,
+        0.56
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 273,
+      "file": "/assets/sprites/forest_edge_temperate_01.png"
+    },
+    {
+      "id": "forest_edge_temperate_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 4e-05,
+      "diamondR2": [
+        0.564,
+        0.566
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 273,
+      "file": "/assets/sprites/forest_edge_temperate_02.png"
+    },
+    {
+      "id": "forest_edge_arctic_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.721,
+        0.537
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 280,
+      "file": "/assets/sprites/forest_edge_arctic_01.png"
+    },
+    {
+      "id": "forest_edge_arctic_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00014,
+      "diamondR2": [
+        0.856,
+        0.434
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 249,
+      "file": "/assets/sprites/forest_edge_arctic_02.png"
+    },
+    {
+      "id": "jungle_edge_tropical_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00056,
+      "diamondR2": [
+        0.529,
+        0.533
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 283,
+      "file": "/assets/sprites/jungle_edge_tropical_01.png"
+    },
+    {
+      "id": "jungle_edge_tropical_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.542,
+        0.542
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 278,
+      "file": "/assets/sprites/jungle_edge_tropical_02.png"
+    },
+    {
+      "id": "mountain_range_3x1_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 9e-05,
+      "diamondR2": [
+        0.471,
+        0.47
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 540,
+      "height": 202,
+      "file": "/assets/sprites/mountain_range_3x1_01.png"
+    },
+    {
+      "id": "mountain_range_3x1_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00017,
+      "diamondR2": [
+        0.475,
+        0.471
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 540,
+      "height": 202,
+      "file": "/assets/sprites/mountain_range_3x1_02.png"
+    },
+    {
+      "id": "scrub_dunes_01",
+      "passed": false,
+      "reasons": [
+        "4-sided diamond pedestal detected (R2=0.985/0.978)"
+      ],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.985,
+        0.978
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 268,
+      "file": "/assets/sprites/scrub_dunes_01.png"
+    },
+    {
+      "id": "scrub_dunes_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.528,
+        0.529
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 284,
+      "file": "/assets/sprites/scrub_dunes_02.png"
+    },
+    {
+      "id": "rocky_desert_outcrops_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.559,
+        0.563
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 273,
+      "file": "/assets/sprites/rocky_desert_outcrops_01.png"
+    },
+    {
+      "id": "ancient_ruins_tundra_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00145,
+      "diamondR2": [
+        0.609,
+        0.656
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 258,
+      "file": "/assets/sprites/ancient_ruins_tundra_01.png"
+    },
+    {
+      "id": "arctic_sea_ice_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.01168,
+      "diamondR2": [
+        0.565,
+        0.574
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 283,
+      "file": "/assets/sprites/arctic_sea_ice_01.png"
+    },
+    {
+      "id": "arctic_sea_ice_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00268,
+      "diamondR2": [
+        0.656,
+        0.691
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 285,
+      "file": "/assets/sprites/arctic_sea_ice_02.png"
+    },
+    {
+      "id": "arctic_sea_ice_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 4e-05,
+      "diamondR2": [
+        0.768,
+        0.735
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 268,
+      "file": "/assets/sprites/arctic_sea_ice_03.png"
+    },
+    {
+      "id": "arctic_sea_ice_04",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.01529,
+      "diamondR2": [
+        0.633,
+        0.536
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 280,
+      "height": 274,
+      "file": "/assets/sprites/arctic_sea_ice_04.png"
+    },
+    {
+      "id": "arctic_sea_ice_05",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.01411,
+      "diamondR2": [
+        0.618,
+        0.6
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 254,
+      "file": "/assets/sprites/arctic_sea_ice_05.png"
+    },
+    {
+      "id": "arctic_sea_ice_06",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00204,
+      "diamondR2": [
+        0.55,
+        0.551
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 283,
+      "file": "/assets/sprites/arctic_sea_ice_06.png"
+    },
+    {
+      "id": "mega_mountain_massif_arctic_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 4e-05,
+      "diamondR2": [
+        0.832,
+        0.834
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 413,
+      "file": "/assets/sprites/mega_mountain_massif_arctic_01.png"
+    },
+    {
+      "id": "mega_mountain_massif_arctic_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 3e-05,
+      "diamondR2": [
+        0.84,
+        0.842
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 418,
+      "file": "/assets/sprites/mega_mountain_massif_arctic_02.png"
+    },
+    {
+      "id": "mega_mountain_massif_temperate_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 8e-05,
+      "diamondR2": [
+        0.836,
+        0.837
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 418,
+      "file": "/assets/sprites/mega_mountain_massif_temperate_01.png"
+    },
+    {
+      "id": "mega_mountain_massif_temperate_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 8e-05,
+      "diamondR2": [
+        0.838,
+        0.839
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 419,
+      "file": "/assets/sprites/mega_mountain_massif_temperate_02.png"
+    },
+    {
+      "id": "mega_mountain_massif_arid_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 5e-05,
+      "diamondR2": [
+        0.737,
+        0.838
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 418,
+      "file": "/assets/sprites/mega_mountain_massif_arid_01.png"
+    },
+    {
+      "id": "mega_mountain_massif_arid_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 6e-05,
+      "diamondR2": [
+        0.838,
+        0.838
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 419,
+      "file": "/assets/sprites/mega_mountain_massif_arid_02.png"
+    },
+    {
+      "id": "mega_woodland_canopy_temperate_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.838,
+        0.841
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 419,
+      "file": "/assets/sprites/mega_woodland_canopy_temperate_01.png"
+    },
+    {
+      "id": "mega_woodland_canopy_temperate_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00012,
+      "diamondR2": [
+        0.968,
+        0.942
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 589,
+      "height": 451,
+      "file": "/assets/sprites/mega_woodland_canopy_temperate_02.png"
+    },
+    {
+      "id": "mega_woodland_canopy_arctic_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 1e-05,
+      "diamondR2": [
+        0.791,
+        0.802
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 416,
+      "file": "/assets/sprites/mega_woodland_canopy_arctic_01.png"
+    },
+    {
+      "id": "mega_woodland_canopy_arctic_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00048,
+      "diamondR2": [
+        0.691,
+        0.648
+      ],
+      "fill": [
+        0.99,
+        0.99
+      ],
+      "width": 611,
+      "height": 316,
+      "file": "/assets/sprites/mega_woodland_canopy_arctic_02.png"
+    },
+    {
+      "id": "mega_woodland_canopy_tropical_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0001,
+      "diamondR2": [
+        0.838,
+        0.838
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 418,
+      "file": "/assets/sprites/mega_woodland_canopy_tropical_01.png"
+    },
+    {
+      "id": "mega_woodland_canopy_tropical_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 8e-05,
+      "diamondR2": [
+        0.838,
+        0.838
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 419,
+      "file": "/assets/sprites/mega_woodland_canopy_tropical_02.png"
+    },
+    {
+      "id": "mega_highland_crags_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 9e-05,
+      "diamondR2": [
+        0.836,
+        0.835
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 414,
+      "file": "/assets/sprites/mega_highland_crags_01.png"
+    },
+    {
+      "id": "mega_highland_crags_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 3e-05,
+      "diamondR2": [
+        0.837,
+        0.837
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 418,
+      "file": "/assets/sprites/mega_highland_crags_02.png"
+    },
+    {
+      "id": "mega_dune_sea_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 6e-05,
+      "diamondR2": [
+        0.838,
+        0.838
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 419,
+      "file": "/assets/sprites/mega_dune_sea_01.png"
+    },
+    {
+      "id": "mega_dune_sea_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 1e-05,
+      "diamondR2": [
+        0.837,
+        0.837
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 418,
+      "file": "/assets/sprites/mega_dune_sea_02.png"
+    },
+    {
+      "id": "micro_scattered_boulders_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.817,
+        0.521
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 206,
+      "file": "/assets/sprites/micro_scattered_boulders_01.png"
+    },
+    {
+      "id": "micro_scattered_boulders_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 5e-05,
+      "diamondR2": [
+        0.001,
+        1.0
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 132,
+      "file": "/assets/sprites/micro_scattered_boulders_02.png"
+    },
+    {
+      "id": "micro_heather_scrub_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0004,
+      "diamondR2": [
+        0.046,
+        0.667
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 189,
+      "file": "/assets/sprites/micro_heather_scrub_01.png"
+    },
+    {
+      "id": "micro_lone_oak_grove_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0003,
+      "diamondR2": [
+        0.571,
+        0.353
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 282,
+      "file": "/assets/sprites/micro_lone_oak_grove_01.png"
+    },
+    {
+      "id": "micro_dry_grass_tufts_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00116,
+      "diamondR2": [
+        0.015,
+        0.983
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 225,
+      "file": "/assets/sprites/micro_dry_grass_tufts_01.png"
+    },
+    {
+      "id": "micro_eroded_rock_outcrop_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.99,
+        0.914
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 162,
+      "file": "/assets/sprites/micro_eroded_rock_outcrop_01.png"
+    },
+    {
+      "id": "wonder_mount_celestial",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00214,
+      "diamondR2": [
+        0.49,
+        0.486
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 231,
+      "file": "/assets/sprites/wonder_mount_celestial.png"
+    },
+    {
+      "id": "wonder_sunken_emerald_canyon",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00011,
+      "diamondR2": [
+        0.441,
+        0.856
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 420,
+      "height": 241,
+      "file": "/assets/sprites/wonder_sunken_emerald_canyon.png"
+    },
+    {
+      "id": "wonder_great_sapphire_atoll",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 4e-05,
+      "diamondR2": [
+        0.462,
+        0.455
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 234,
+      "file": "/assets/sprites/wonder_great_sapphire_atoll.png"
+    },
+    {
+      "id": "wonder_crimson_pillar_mesas",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00058,
+      "diamondR2": [
+        0.001,
+        0.476
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 235,
+      "file": "/assets/sprites/wonder_crimson_pillar_mesas.png"
+    },
+    {
+      "id": "wonder_overgrown_sun_ziggurat",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 3e-05,
+      "diamondR2": [
+        0.942,
+        0.938
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 211,
+      "file": "/assets/sprites/wonder_overgrown_sun_ziggurat.png"
+    },
+    {
+      "id": "wonder_colossus_of_the_coast",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.766,
+        0.226
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 218,
+      "file": "/assets/sprites/wonder_colossus_of_the_coast.png"
+    },
+    {
+      "id": "wonder_astral_monolith_ring",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0001,
+      "diamondR2": [
+        0.766,
+        0.777
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 205,
+      "file": "/assets/sprites/wonder_astral_monolith_ring.png"
+    },
+    {
+      "id": "wonder_petrified_leviathan",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 7e-05,
+      "diamondR2": [
+        0.471,
+        0.471
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 234,
+      "file": "/assets/sprites/wonder_petrified_leviathan.png"
+    },
+    {
+      "id": "hills_tropical_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 4e-05,
+      "diamondR2": [
+        0.818,
+        0.944
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 193,
+      "file": "/assets/sprites/hills_tropical_01.png"
+    },
+    {
+      "id": "hills_tropical_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.924,
+        0.937
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 195,
+      "file": "/assets/sprites/hills_tropical_02.png"
+    },
+    {
+      "id": "resource_iron_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 7e-05,
+      "diamondR2": [
+        0.703,
+        0.7
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 269,
+      "file": "/assets/sprites/resource_iron_01.png"
+    },
+    {
+      "id": "resource_coal_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00014,
+      "diamondR2": [
+        0.634,
+        0.599
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 271,
+      "file": "/assets/sprites/resource_coal_01.png"
+    },
+    {
+      "id": "resource_copper_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.817,
+        0.837
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 273,
+      "file": "/assets/sprites/resource_copper_01.png"
+    },
+    {
+      "id": "resource_marble_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.554,
+        0.556
+      ],
+      "fill": [
+        0.99,
+        1.0
+      ],
+      "width": 280,
+      "height": 280,
+      "file": "/assets/sprites/resource_marble_01.png"
+    },
+    {
+      "id": "resource_cattle_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 7e-05,
+      "diamondR2": [
+        0.168,
+        0.539
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 214,
+      "file": "/assets/sprites/resource_cattle_01.png"
+    },
+    {
+      "id": "resource_timber_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 5e-05,
+      "diamondR2": [
+        0.706,
+        0.708
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 225,
+      "file": "/assets/sprites/resource_timber_01.png"
+    },
+    {
+      "id": "resource_fish_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00014,
+      "diamondR2": [
+        0.004,
+        0.001
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 220,
+      "file": "/assets/sprites/resource_fish_01.png"
+    },
+    {
+      "id": "resource_whales_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00023,
+      "diamondR2": [
+        0.937,
+        0.884
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 211,
+      "file": "/assets/sprites/resource_whales_01.png"
+    },
+    {
+      "id": "mystery_package_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00015,
+      "diamondR2": [
+        0.838,
+        0.731
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 274,
+      "file": "/assets/sprites/mystery_package_01.png"
+    },
+    {
+      "id": "mystery_package_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00051,
+      "diamondR2": [
+        0.53,
+        0.535
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 280,
+      "height": 277,
+      "file": "/assets/sprites/mystery_package_02.png"
+    },
+    {
+      "id": "mystery_package_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00015,
+      "diamondR2": [
+        0.704,
+        0.988
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 260,
+      "file": "/assets/sprites/mystery_package_03.png"
+    },
+    {
+      "id": "anomaly_observatory_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00024,
+      "diamondR2": [
+        0.597,
+        0.586
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 300,
+      "file": "/assets/sprites/anomaly_observatory_01.png"
+    },
+    {
+      "id": "anomaly_ley_monolith_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00036,
+      "diamondR2": [
+        0.311,
+        0.568
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 298,
+      "file": "/assets/sprites/anomaly_ley_monolith_01.png"
+    },
+    {
+      "id": "anomaly_fossil_dig_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00017,
+      "diamondR2": [
+        0.531,
+        0.527
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 283,
+      "file": "/assets/sprites/anomaly_fossil_dig_01.png"
+    },
+    {
+      "id": "anomaly_relic_shrine_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 9e-05,
+      "diamondR2": [
+        0.886,
+        0.879
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 268,
+      "file": "/assets/sprites/anomaly_relic_shrine_01.png"
+    },
+    {
+      "id": "ridge_outcrop_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00029,
+      "diamondR2": [
+        0.681,
+        0.68
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 236,
+      "file": "/assets/sprites/ridge_outcrop_01.png"
+    },
+    {
+      "id": "ridge_outcrop_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.0,
+      "diamondR2": [
+        0.712,
+        0.634
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 249,
+      "file": "/assets/sprites/ridge_outcrop_02.png"
+    },
+    {
+      "id": "ridge_outcrop_03",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00017,
+      "diamondR2": [
+        0.543,
+        0.517
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 299,
+      "file": "/assets/sprites/ridge_outcrop_03.png"
+    },
+    {
+      "id": "ridge_outcrop_04",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.86,
+        0.861
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 272,
+      "file": "/assets/sprites/ridge_outcrop_04.png"
+    },
+    {
+      "id": "ridge_outcrop_05",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00029,
+      "diamondR2": [
+        0.58,
+        0.581
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 271,
+      "file": "/assets/sprites/ridge_outcrop_05.png"
+    },
+    {
+      "id": "ridge_outcrop_06",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00017,
+      "diamondR2": [
+        0.604,
+        0.622
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 260,
+      "file": "/assets/sprites/ridge_outcrop_06.png"
+    },
+    {
+      "id": "ridge_outcrop_wide_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00036,
+      "diamondR2": [
+        0.191,
+        0.13
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 233,
+      "file": "/assets/sprites/ridge_outcrop_wide_01.png"
+    },
+    {
+      "id": "ridge_outcrop_wide_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00017,
+      "diamondR2": [
+        0.023,
+        0.199
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 232,
+      "file": "/assets/sprites/ridge_outcrop_wide_02.png"
+    },
+    {
+      "id": "mega_highland_arctic_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 1e-05,
+      "diamondR2": [
+        0.919,
+        0.926
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 418,
+      "file": "/assets/sprites/mega_highland_arctic_01.png"
+    },
+    {
+      "id": "single_horse_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00039,
+      "diamondR2": [
+        0.476,
+        0.82
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 291,
+      "file": "/assets/sprites/single_horse_01.png"
+    },
+    {
+      "id": "single_cattle_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00086,
+      "diamondR2": [
+        0.879,
+        0.596
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 189,
+      "file": "/assets/sprites/single_cattle_01.png"
+    },
+    {
+      "id": "single_whale_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 8e-05,
+      "diamondR2": [
+        0.917,
+        0.467
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 240,
+      "height": 290,
+      "file": "/assets/sprites/single_whale_01.png"
+    },
+    {
+      "id": "single_fish_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00028,
+      "diamondR2": [
+        0.813,
+        0.314
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 200,
+      "file": "/assets/sprites/single_fish_01.png"
+    },
+    {
+      "id": "single_tree_oak_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00021,
+      "diamondR2": [
+        0.753,
+        0.719
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 240,
+      "height": 326,
+      "file": "/assets/sprites/single_tree_oak_01.png"
+    },
+    {
+      "id": "single_tree_pine_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 7e-05,
+      "diamondR2": [
+        0.005,
+        0.0
+      ],
+      "fill": [
+        0.99,
+        1.0
+      ],
+      "width": 240,
+      "height": 431,
+      "file": "/assets/sprites/single_tree_pine_01.png"
+    },
+    {
+      "id": "single_tree_palm_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00056,
+      "diamondR2": [
+        0.842,
+        0.85
+      ],
+      "fill": [
+        0.99,
+        0.99
+      ],
+      "width": 240,
+      "height": 370,
+      "file": "/assets/sprites/single_tree_palm_01.png"
+    },
+    {
+      "id": "mega_pine_7hex_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 5e-05,
+      "diamondR2": [
+        0.838,
+        0.837
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 418,
+      "file": "/assets/sprites/mega_pine_7hex_01.png"
+    },
+    {
+      "id": "mega_pine_7hex_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 6e-05,
+      "diamondR2": [
+        0.837,
+        0.836
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 417,
+      "file": "/assets/sprites/mega_pine_7hex_02.png"
+    },
+    {
+      "id": "pine_range_3x1_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00021,
+      "diamondR2": [
+        0.469,
+        0.471
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 540,
+      "height": 201,
+      "file": "/assets/sprites/pine_range_3x1_01.png"
+    },
+    {
+      "id": "pine_range_3x1_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 4e-05,
+      "diamondR2": [
+        0.798,
+        0.99
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 540,
+      "height": 258,
+      "file": "/assets/sprites/pine_range_3x1_02.png"
+    },
+    {
+      "id": "mega_broadleaf_7hex_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00012,
+      "diamondR2": [
+        0.839,
+        0.838
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 418,
+      "file": "/assets/sprites/mega_broadleaf_7hex_01.png"
+    },
+    {
+      "id": "mega_broadleaf_7hex_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 9e-05,
+      "diamondR2": [
+        0.839,
+        0.841
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 560,
+      "height": 419,
+      "file": "/assets/sprites/mega_broadleaf_7hex_02.png"
+    },
+    {
+      "id": "broadleaf_range_3x1_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00013,
+      "diamondR2": [
+        0.472,
+        0.469
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 540,
+      "height": 201,
+      "file": "/assets/sprites/broadleaf_range_3x1_01.png"
+    },
+    {
+      "id": "broadleaf_range_3x1_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 9e-05,
+      "diamondR2": [
+        0.469,
+        0.468
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 540,
+      "height": 202,
+      "file": "/assets/sprites/broadleaf_range_3x1_02.png"
+    },
+    {
+      "id": "canyon_arch_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.073,
+        0.111
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 309,
+      "file": "/assets/sprites/canyon_arch_01.png"
+    },
+    {
+      "id": "canyon_arch_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 9e-05,
+      "diamondR2": [
+        0.969,
+        0.527
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 420,
+      "height": 235,
+      "file": "/assets/sprites/canyon_arch_02.png"
+    },
+    {
+      "id": "granite_crag_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00016,
+      "diamondR2": [
+        0.531,
+        0.525
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 274,
+      "file": "/assets/sprites/granite_crag_01.png"
+    },
+    {
+      "id": "granite_crag_02",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 8e-05,
+      "diamondR2": [
+        0.927,
+        0.926
+      ],
+      "fill": [
+        1.0,
+        0.99
+      ],
+      "width": 420,
+      "height": 247,
+      "file": "/assets/sprites/granite_crag_02.png"
+    },
+    {
+      "id": "ruin_temple_courtyard_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00032,
+      "diamondR2": [
+        0.52,
+        0.521
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 283,
+      "file": "/assets/sprites/ruin_temple_courtyard_01.png"
+    },
+    {
+      "id": "ruin_stone_aqueduct_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 0.00048,
+      "diamondR2": [
+        0.525,
+        0.522
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 283,
+      "file": "/assets/sprites/ruin_stone_aqueduct_01.png"
+    },
+    {
+      "id": "ruin_obelisk_ring_01",
+      "passed": true,
+      "reasons": [],
+      "whiteRatio": 2e-05,
+      "diamondR2": [
+        0.558,
+        0.569
+      ],
+      "fill": [
+        1.0,
+        1.0
+      ],
+      "width": 280,
+      "height": 274,
+      "file": "/assets/sprites/ruin_obelisk_ring_01.png"
+    }
+  ]
+}

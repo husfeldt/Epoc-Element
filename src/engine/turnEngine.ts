@@ -231,6 +231,14 @@ export function updateVisibility(state: GameState) {
     }
   }
 
+  // Full Map Revealed mode: keep entire map explored and visible for the player
+  if (state.config.revealAllMap) {
+    for (const tile of Object.values(state.tiles)) {
+      tile.exploredBy[state.playerCivId] = true;
+      tile.visibleTo[state.playerCivId] = true;
+    }
+  }
+
   // Check diplomatic first contact by visibility
   for (const civId of Object.keys(state.civs)) {
     const civ = state.civs[civId];
@@ -239,20 +247,59 @@ export function updateVisibility(state: GameState) {
       if (otherUnit.civId === civId) continue;
       const t = state.tiles[tileKey(otherUnit.q, otherUnit.r)];
       if (t?.visibleTo[civId]) {
-        meetCivilization(state, civId, otherUnit.civId);
+        meetCivilization(state, civId, otherUnit.civId, otherUnit.q, otherUnit.r);
       }
     }
     for (const otherCity of Object.values(state.cities)) {
       if (otherCity.civId === civId) continue;
       const t = state.tiles[tileKey(otherCity.q, otherCity.r)];
       if (t?.visibleTo[civId]) {
-        meetCivilization(state, civId, otherCity.civId);
+        meetCivilization(state, civId, otherCity.civId, otherCity.q, otherCity.r);
+      }
+    }
+  }
+
+  // Check first contact with Barbarian Tribes for the player
+  if (!state.metBarbarianCamps) state.metBarbarianCamps = {};
+  for (const camp of Object.values(state.barbarianCamps)) {
+    if (state.metBarbarianCamps[camp.id]) continue;
+    const t = state.tiles[tileKey(camp.q, camp.r)];
+    if (t?.visibleTo[state.playerCivId]) {
+      state.metBarbarianCamps[camp.id] = true;
+      const isPeaceful = camp.disposition === 'peaceful';
+      state.notices.unshift({
+        id: `meet_camp_${camp.id}_${state.turn}`,
+        turn: state.turn,
+        title: `Discovered ${camp.name}`,
+        detail: isPeaceful
+          ? 'A peaceful frontier tribe welcomes trade and safe passage.'
+          : 'Hostile raiders guard this encampment. Approach with caution!',
+        kind: 'diplomacy',
+        q: camp.q,
+        r: camp.r,
+      });
+      if (!state.activeEncounter && !state.config.revealAllMap) {
+        state.activeEncounter = {
+          id: `enc_camp_${camp.id}_${state.turn}`,
+          kind: 'barbarian',
+          targetId: camp.id,
+          name: camp.name,
+          leaderOrTribe: isPeaceful ? 'Elder Council' : 'Warchief',
+          color: isPeaceful ? '#0d9488' : '#b91c1c',
+          disposition: isPeaceful ? 'Peaceful' : 'Hostile Raider',
+          greeting: isPeaceful
+            ? `Hail, traveler! Our elders of ${camp.name} offer fair barter and peace along these trails.`
+            : `Turn back, outsider! ${camp.name} claims these hills by spear and blood.`,
+          q: camp.q,
+          r: camp.r,
+          emblemSeed: Math.abs(camp.q * 31 + camp.r * 17 + camp.name.length * 13),
+        };
       }
     }
   }
 }
 
-function meetCivilization(state: GameState, civA: string, civB: string) {
+function meetCivilization(state: GameState, civA: string, civB: string, q = 0, r = 0) {
   const a = state.civs[civA];
   const b = state.civs[civB];
   if (!a || !b || a.isEliminated || b.isEliminated) return;
@@ -269,6 +316,21 @@ function meetCivilization(state: GameState, civA: string, civB: string) {
         detail: `${b.leaderName} greets your scouts. Diplomacy and Trade Routes are now open.`,
         kind: 'diplomacy',
       });
+      if (!state.activeEncounter && !state.config.revealAllMap) {
+        state.activeEncounter = {
+          id: `enc_civ_${civB}_${state.turn}`,
+          kind: 'civ',
+          targetId: civB,
+          name: b.name,
+          leaderOrTribe: b.leaderName,
+          color: b.color,
+          disposition: 'Cautious',
+          greeting: `Greetings from ${b.name}. I am ${b.leaderName} — may wisdom and fair trade guide the meeting of our peoples.`,
+          q,
+          r,
+          emblemSeed: Math.abs(b.name.length * 41 + b.leaderName.length * 19),
+        };
+      }
     }
   }
 }
@@ -601,6 +663,89 @@ export function buyTileForCity(state: GameState, cityId: string, q: number, r: n
   return { ...state };
 }
 
+export function rollHiddenTileDiscovery(
+  state: GameState,
+  unit: UnitState,
+  tile: HexTile,
+  isEndOfTurnStop: boolean
+) {
+  if (
+    tile.hiddenDiscoverySearched ||
+    tile.biome === 'ocean' ||
+    tile.biome === 'coast' ||
+    tile.biome === 'mountain'
+  ) {
+    return;
+  }
+
+  const def = UNIT_DEFS[unit.defId];
+  const baseChance =
+    def.role === 'explorer' || unit.defId === 'explorer'
+      ? 0.12
+      : def.role === 'scout' || unit.defId === 'scout'
+        ? 0.05
+        : 0.02;
+  const finalChance = isEndOfTurnStop ? baseChance * (4 / 3) : baseChance;
+
+  // Mark searched so tiles cannot be repeatedly farmed
+  tile.hiddenDiscoverySearched = true;
+
+  if (Math.random() >= finalChance) return;
+  if (unit.civId !== state.playerCivId) return;
+
+  const civ = state.civs[unit.civId];
+  const roll = Math.floor(Math.random() * 5);
+  let title = 'Hidden Discovery';
+  let detail = '';
+
+  if (roll === 0) {
+    title = 'Rare Botanical Specimen';
+    const node = CORE_KNOWLEDGE_NODES.find(
+      (n) => !civ.unlockedCore.includes(n.id) && n.dependencies.every((d) => civ.unlockedCore.includes(d))
+    );
+    if (node) {
+      civ.coreProgress[node.id] = Math.min(100, (civ.coreProgress[node.id] ?? 0) + 12);
+      if (civ.coreProgress[node.id] >= 100 && !civ.unlockedCore.includes(node.id)) {
+        civ.unlockedCore.push(node.id);
+      }
+      detail = `${def.name} uncovered a rare wild specimen (+12% progress toward ${node.name}).`;
+    } else {
+      civ.gold += 20;
+      detail = `${def.name} cataloged rare medicinal herbs (+20 Gold).`;
+    }
+  } else if (roll === 1) {
+    title = 'Hidden Mineral Trace';
+    civ.gold += 25;
+    detail = `${def.name} spotted exposed ore veins beneath the soil (+25 Gold).`;
+  } else if (roll === 2) {
+    title = 'Ancient Trail Cache';
+    civ.gold += 20;
+    unit.xp += 15;
+    detail = `${def.name} found a buried traveler's cache (+20 Gold, +15 Unit XP).`;
+  } else if (roll === 3) {
+    title = 'Fresh Hidden Spring';
+    unit.hp = Math.min(unit.maxHp, unit.hp + 15);
+    detail = `${def.name} discovered a clear natural spring (+15 HP restored).`;
+  } else {
+    title = 'Lost Map Fragment';
+    for (const c of hexInRange(tile.q, tile.r, 3)) {
+      const nt = state.tiles[tileKey(c.q, c.r)];
+      if (nt) nt.exploredBy[unit.civId] = true;
+    }
+    detail = `${def.name} recovered weathered cartographer notes (nearby terrain revealed).`;
+  }
+
+  state.notices.unshift({
+    id: `hidden_disc_${state.turn}_${tile.q}_${tile.r}`,
+    turn: state.turn,
+    title: `${title}${isEndOfTurnStop ? ' (Camp Survey)' : ''}`,
+    detail,
+    kind: 'event',
+    q: tile.q,
+    r: tile.r,
+  });
+}
+
 export function moveUnitTo(state: GameState, unitId: string, targetQ: number, targetR: number, cost: number): GameState {
   const unit = state.units[unitId];
   if (!unit) return state;
@@ -616,6 +761,9 @@ export function moveUnitTo(state: GameState, unitId: string, targetQ: number, ta
   // Trigger exploration event or automatic specimen survey popup when encountering an unsurveyed feature
   const tile = state.tiles[tileKey(targetQ, targetR)];
   const def = UNIT_DEFS[unit.defId];
+  if (tile) {
+    rollHiddenTileDiscovery(state, unit, tile, false);
+  }
   if (
     tile &&
     unit.civId === state.playerCivId &&
@@ -747,7 +895,7 @@ function performTileFeatureSurvey(
         n.dependencies.every((d) => civ.unlockedCore.includes(d))
     );
 
-  const sparkPct = Math.round(48 * surveyBonus);
+  const sparkPct = Math.round((8 + Math.random() * 7) * surveyBonus);
   if (targetNode) {
     const progressBefore = Math.min(100, Math.round(civ.coreProgress[targetNode.id] ?? 0));
     const progressAfter = Math.min(100, progressBefore + sparkPct);
@@ -904,7 +1052,7 @@ export function resolveExplorationEventChoice(state: GameState, choiceIdx: numbe
       );
     if (node) {
       const progressBefore = Math.min(100, Math.round(civ.coreProgress[node.id] ?? 0));
-      const progressAfter = Math.min(100, progressBefore + 65);
+      const progressAfter = Math.min(100, progressBefore + 15);
       const isFullDiscovery = progressAfter >= 100;
       civ.coreProgress[node.id] = progressAfter;
       if (isFullDiscovery && !civ.unlockedCore.includes(node.id)) {
@@ -1015,12 +1163,33 @@ export function startWorkerTask(
   return { ...state };
 }
 
+export interface CombatPreviewData {
+  estDamage: number;
+  estCounter: number;
+  kind: 'melee' | 'ranged' | 'siege' | 'naval';
+  targetName: string;
+  attackerName: string;
+  attackerDefId: string;
+  attackerHp: number;
+  attackerMaxHp: number;
+  attackerAtk: number;
+  attackerDef: number;
+  defenderDefId?: string;
+  defenderHp: number;
+  defenderMaxHp: number;
+  defenderAtk: number;
+  defenderDef: number;
+  defenderKind: 'unit' | 'barbarian' | 'city';
+  bonuses: string[];
+  forecast: 'Decisive Victory' | 'Favorable' | 'Even Match' | 'Risky' | 'Likely Defeat';
+}
+
 export function previewCombat(
   state: GameState,
   attackerId: string,
   targetQ: number,
   targetR: number
-): { estDamage: number; estCounter: number; kind: 'melee' | 'ranged' | 'siege' | 'naval'; targetName: string } | null {
+): CombatPreviewData | null {
   const attacker = state.units[attackerId];
   if (!attacker) return null;
   const atkDef = UNIT_DEFS[attacker.defId];
@@ -1037,17 +1206,57 @@ export function previewCombat(
           ? 'ranged'
           : 'melee';
 
+  const bonuses: string[] = [];
+  if (atkTile?.biome === 'hills') bonuses.push('Attacker High Ground (+3 ATK)');
+  if (defTile.biome === 'hills') bonuses.push('Defender Hills (+4 DEF)');
+  if (defTile.biome === 'forest') bonuses.push('Defender Forest Cover (+3 DEF)');
+  if (defTile.hasRiver && atkDef.range === 1) bonuses.push('River Crossing');
+
+  const computeForecast = (
+    estDmg: number,
+    estCnt: number,
+    atkHp: number,
+    defHp: number
+  ): CombatPreviewData['forecast'] => {
+    if (estDmg >= defHp && estCnt < atkHp * 0.4) return 'Decisive Victory';
+    if (estCnt >= atkHp) return 'Likely Defeat';
+    const ratio = estDmg / Math.max(1, estCnt);
+    if (ratio >= 1.6 || estCnt === 0) return 'Favorable';
+    if (ratio >= 0.85) return 'Even Match';
+    return 'Risky';
+  };
+
   const enemyUnit = Object.values(state.units).find(
     (u) => u.q === targetQ && u.r === targetR && u.civId !== attacker.civId
   );
   if (enemyUnit) {
     const defStats = getUnitEffectiveStats(enemyUnit, defTile);
+    if (enemyUnit.fortified) bonuses.push('Defender Fortified (+5 DEF)');
     const estDamage = Math.max(8, Math.round((atkStats.attack / Math.max(6, defStats.defense)) * 28));
     const estCounter =
       atkDef.range === 1 && enemyUnit.hp > estDamage
         ? Math.max(5, Math.round((defStats.defense / Math.max(6, atkStats.attack)) * 18))
         : 0;
-    return { estDamage, estCounter, kind, targetName: UNIT_DEFS[enemyUnit.defId].name };
+    return {
+      estDamage,
+      estCounter,
+      kind,
+      targetName: UNIT_DEFS[enemyUnit.defId].name,
+      attackerName: atkDef.name,
+      attackerDefId: attacker.defId,
+      attackerHp: attacker.hp,
+      attackerMaxHp: attacker.maxHp,
+      attackerAtk: atkStats.attack,
+      attackerDef: atkStats.defense,
+      defenderDefId: enemyUnit.defId,
+      defenderHp: enemyUnit.hp,
+      defenderMaxHp: enemyUnit.maxHp,
+      defenderAtk: defStats.attack,
+      defenderDef: defStats.defense,
+      defenderKind: 'unit',
+      bonuses,
+      forecast: computeForecast(estDamage, estCounter, attacker.hp, enemyUnit.hp),
+    };
   }
 
   const barbUnit = Object.values(state.barbarianUnits).find(
@@ -1059,7 +1268,25 @@ export function previewCombat(
       atkDef.range === 1 && barbUnit.hp > estDamage
         ? Math.max(4, Math.round((barbUnit.attack / Math.max(6, atkStats.defense)) * 16))
         : 0;
-    return { estDamage, estCounter, kind, targetName: barbUnit.name };
+    return {
+      estDamage,
+      estCounter,
+      kind,
+      targetName: barbUnit.name,
+      attackerName: atkDef.name,
+      attackerDefId: attacker.defId,
+      attackerHp: attacker.hp,
+      attackerMaxHp: attacker.maxHp,
+      attackerAtk: atkStats.attack,
+      attackerDef: atkStats.defense,
+      defenderHp: barbUnit.hp,
+      defenderMaxHp: barbUnit.maxHp,
+      defenderAtk: barbUnit.attack,
+      defenderDef: barbUnit.defense,
+      defenderKind: 'barbarian',
+      bonuses,
+      forecast: computeForecast(estDamage, estCounter, attacker.hp, barbUnit.hp),
+    };
   }
 
   const enemyCity = Object.values(state.cities).find(
@@ -1067,14 +1294,36 @@ export function previewCombat(
   );
   if (enemyCity) {
     let cityDef = 16 + enemyCity.population * 2;
-    if (enemyCity.buildings.includes('walls')) cityDef += 12;
+    if (enemyCity.buildings.includes('walls')) {
+      cityDef += 12;
+      bonuses.push('City Walls (+12 DEF)');
+    }
+    if (atkDef.role === 'siege') bonuses.push('Siege Bonus (+14 ATK)');
     const effectiveAtk = atkStats.attack + (atkDef.role === 'siege' ? 14 : 0) + atkStats.siegeBonus;
     const estDamage = Math.max(10, Math.round((effectiveAtk / Math.max(10, cityDef)) * 30));
     const estCounter =
       atkDef.range === 1 && enemyCity.hp > estDamage
         ? Math.max(6, Math.round((cityDef / Math.max(8, atkStats.defense)) * 16))
         : 0;
-    return { estDamage, estCounter, kind, targetName: enemyCity.name };
+    return {
+      estDamage,
+      estCounter,
+      kind,
+      targetName: enemyCity.name,
+      attackerName: atkDef.name,
+      attackerDefId: attacker.defId,
+      attackerHp: attacker.hp,
+      attackerMaxHp: attacker.maxHp,
+      attackerAtk: effectiveAtk,
+      attackerDef: atkStats.defense,
+      defenderHp: enemyCity.hp,
+      defenderMaxHp: enemyCity.maxHp,
+      defenderAtk: cityDef,
+      defenderDef: cityDef,
+      defenderKind: 'city',
+      bonuses,
+      forecast: computeForecast(estDamage, estCounter, attacker.hp, enemyCity.hp),
+    };
   }
 
   return null;
@@ -1425,7 +1674,7 @@ export function tradeWithPeacefulBarbarians(state: GameState, campId: string): G
   );
   if (eligible.length > 0) {
     const pick = eligible[Math.floor(Math.random() * eligible.length)];
-    player.coreProgress[pick.id] = (player.coreProgress[pick.id] ?? 0) + 35;
+    player.coreProgress[pick.id] = (player.coreProgress[pick.id] ?? 0) + 12;
     if (player.coreProgress[pick.id] >= 100) {
       player.coreProgress[pick.id] = 100;
       player.unlockedCore.push(pick.id);
@@ -1604,6 +1853,10 @@ export function endTurn(state: GameState): GameState {
 
   for (const unit of Object.values(state.units)) {
     const def = UNIT_DEFS[unit.defId];
+    const stopTile = state.tiles[tileKey(unit.q, unit.r)];
+    if (stopTile && unit.civId === state.playerCivId) {
+      rollHiddenTileDiscovery(state, unit, stopTile, true);
+    }
     let bonusMoves = 0;
     if (unit.promotions.includes('pathfinder') || unit.promotions.includes('seafarer')) {
       bonusMoves += 1;

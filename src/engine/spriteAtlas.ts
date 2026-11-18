@@ -1490,3 +1490,31 @@ export function getUnitMiniatureSprite(
   const fb = fallbackByRole[def.role] || [0, 1];
   return atlas.byCoord.get(`${Math.min(fb[0], atlas.cols - 1)},${Math.min(fb[1], atlas.rows - 1)}`) || null;
 }
+
+const unitDataUrlCache = new Map<string, string>();
+export function getUnitSpriteDataUrl(defId?: string, isBarbarian = false): string | null {
+  const key = `${isBarbarian ? 'barb' : 'civ'}:${defId ?? 'warrior'}`;
+  const cached = unitDataUrlCache.get(key);
+  if (cached) return cached;
+
+  const atlas = spriteAtlas.getAtlas('units');
+  if (!atlas) return null;
+
+  let hit: SlicedSprite | undefined;
+  if (isBarbarian) {
+    hit = atlas.byCoord.get('4,0');
+  } else if (defId && UNIT_COORD_MAP[defId]) {
+    const [c, r] = UNIT_COORD_MAP[defId];
+    hit = atlas.byCoord.get(`${Math.min(c, atlas.cols - 1)},${Math.min(r, atlas.rows - 1)}`);
+  }
+  if (!hit) hit = atlas.byCoord.get('0,0');
+  if (!hit) return null;
+
+  try {
+    const url = hit.canvas.toDataURL('image/png');
+    unitDataUrlCache.set(key, url);
+    return url;
+  } catch {
+    return null;
+  }
+}

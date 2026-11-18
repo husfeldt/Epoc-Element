@@ -23,8 +23,15 @@ import {
   SKILL_PROMOTIONS,
   UNIT_DEFS,
 } from '../data/registries';
-import { SavedGameSlot } from '../engine/turnEngine';
-import { ExplorationEvent, GameState, SurveyDiscoveryPopup, UnitState } from '../types/game';
+import { CombatPreviewData, SavedGameSlot } from '../engine/turnEngine';
+import { getUnitSpriteDataUrl } from '../engine/spriteAtlas';
+import {
+  ExplorationEvent,
+  FirstEncounterPopup,
+  GameState,
+  SurveyDiscoveryPopup,
+  UnitState,
+} from '../types/game';
 import {
   CORE_ARTWORK_MAP,
   CoreKnowledgePuzzlePlate,
@@ -717,6 +724,346 @@ export const SaveLoadModal: React.FC<{
                 })}
               </div>
             )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// PHASE 5: Procedural Heraldic Flag & Emissary Portrait + FirstEncounterModal
+const HeraldicFlagSvg: React.FC<{ color: string; seed: number; kind: 'civ' | 'barbarian' }> = ({
+  color,
+  seed,
+  kind,
+}) => {
+  const pattern = seed % 5;
+  const accent = kind === 'barbarian' ? '#fef3c7' : '#e6c983';
+  return (
+    <svg viewBox="0 0 96 64" className="w-24 h-16 rounded-lg border border-white/20 shadow-lg shrink-0">
+      <rect width="96" height="64" fill="#0f172a" />
+      {pattern === 0 && <polygon points="0,0 96,0 48,36" fill={color} opacity="0.9" />}
+      {pattern === 1 && (
+        <>
+          <rect width="96" height="32" fill={color} opacity="0.85" />
+          <rect y="48" width="96" height="16" fill={color} opacity="0.6" />
+        </>
+      )}
+      {pattern === 2 && (
+        <>
+          <line x1="0" y1="0" x2="96" y2="64" stroke={color} strokeWidth="14" />
+          <line x1="96" y1="0" x2="0" y2="64" stroke={color} strokeWidth="14" />
+        </>
+      )}
+      {pattern === 3 && (
+        <>
+          <rect x="38" width="20" height="64" fill={color} opacity="0.9" />
+          <rect y="22" width="96" height="20" fill={color} opacity="0.9" />
+        </>
+      )}
+      {pattern === 4 && <circle cx="48" cy="32" r="22" fill={color} opacity="0.85" />}
+      {/* Central Crest */}
+      <circle cx="48" cy="32" r="11" fill="#0c1822" stroke={accent} strokeWidth="2.2" />
+      {kind === 'barbarian' ? (
+        <polygon points="48,23 54,39 48,35 42,39" fill={accent} />
+      ) : (
+        <polygon points="48,23 51,29 57,29 52,33 54,39 48,35 42,39 44,33 39,29 45,29" fill={accent} />
+      )}
+    </svg>
+  );
+};
+
+const EmissaryPortraitSvg: React.FC<{
+  color: string;
+  disposition: FirstEncounterPopup['disposition'];
+  kind: 'civ' | 'barbarian';
+}> = ({ color, disposition, kind }) => {
+  const skin = kind === 'barbarian' ? '#d4a373' : '#e0b899';
+  const helmCol = disposition === 'Hostile Raider' ? '#7f1d1d' : color;
+  return (
+    <svg viewBox="0 0 80 80" className="w-20 h-20 rounded-full border-2 border-[#e6c983]/60 bg-[#08111a] shrink-0">
+      <circle cx="40" cy="40" r="38" fill="#132232" />
+      {/* Shoulders / Cloak */}
+      <path d="M12,78 C14,56 66,56 68,78 Z" fill={helmCol} />
+      <path d="M26,78 L40,56 L54,78 Z" fill="#1e293b" opacity="0.55" />
+      {/* Head */}
+      <circle cx="40" cy="36" r="14" fill={skin} />
+      {/* Crown / Tribal Headdress / Helm */}
+      {kind === 'civ' ? (
+        <path d="M25,30 L28,18 L35,24 L40,15 L45,24 L52,18 L55,30 Z" fill="#e6c983" />
+      ) : (
+        <>
+          <path d="M26,30 Q40,18 54,30 Z" fill="#78350f" />
+          <path d="M26,26 Q18,16 24,10" stroke="#f8fafc" strokeWidth="3" fill="none" strokeLinecap="round" />
+          <path d="M54,26 Q62,16 56,10" stroke="#f8fafc" strokeWidth="3" fill="none" strokeLinecap="round" />
+        </>
+      )}
+      {/* Eyes & Expression */}
+      <circle cx="35" cy="35" r="1.6" fill="#0f172a" />
+      <circle cx="45" cy="35" r="1.6" fill="#0f172a" />
+      {disposition === 'Hostile Raider' ? (
+        <path d="M35,43 Q40,40 45,43" stroke="#0f172a" strokeWidth="1.8" fill="none" />
+      ) : (
+        <path d="M35,41 Q40,45 45,41" stroke="#0f172a" strokeWidth="1.8" fill="none" />
+      )}
+    </svg>
+  );
+};
+
+export const FirstEncounterModal: React.FC<{
+  encounter: FirstEncounterPopup;
+  onGreet: () => void;
+  onOfferTrade?: () => void;
+  onDismiss: () => void;
+}> = ({ encounter, onGreet, onOfferTrade, onDismiss }) => {
+  const dispBadge =
+    encounter.disposition === 'Peaceful'
+      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+      : encounter.disposition === 'Hostile Raider'
+        ? 'bg-rose-500/20 text-rose-300 border-rose-400/40'
+        : 'bg-amber-500/20 text-amber-300 border-amber-400/40';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg bg-[#0c1822] border border-[#e6c983]/60 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="px-6 py-4 bg-gradient-to-r from-[#132232] to-[#0c1822] border-b border-white/10 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[#e6c983]">
+            <Compass className="w-4 h-4" />
+            <span>{encounter.kind === 'civ' ? 'First Diplomatic Contact' : 'Frontier Tribe Encountered'}</span>
+          </div>
+          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${dispBadge}`}>
+            {encounter.disposition}
+          </span>
+        </div>
+
+        <div className="p-6 space-y-5">
+          <div className="flex items-center gap-4">
+            <EmissaryPortraitSvg
+              color={encounter.color}
+              disposition={encounter.disposition}
+              kind={encounter.kind}
+            />
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl font-bold text-[#f8f3e6] font-display truncate">{encounter.name}</h2>
+              <p className="text-xs text-slate-300 mt-0.5">
+                {encounter.kind === 'civ' ? 'Leader: ' : 'Spokesperson: '}
+                <span className="font-semibold text-[#e6c983]">{encounter.leaderOrTribe}</span>
+              </p>
+            </div>
+            <HeraldicFlagSvg
+              color={encounter.color}
+              seed={encounter.emblemSeed}
+              kind={encounter.kind}
+            />
+          </div>
+
+          <blockquote className="p-3.5 rounded-xl bg-[#08111a] border border-white/10 text-sm text-slate-200 italic leading-relaxed">
+            &ldquo;{encounter.greeting}&rdquo;
+          </blockquote>
+
+          <div className="flex flex-wrap items-center justify-end gap-2.5 pt-1">
+            {onOfferTrade && encounter.disposition !== 'Hostile Raider' && (
+              <button
+                type="button"
+                onClick={onOfferTrade}
+                className="px-4 py-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-200 text-xs font-semibold cursor-pointer"
+              >
+                Offer Trade
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onGreet}
+              className="px-4 py-2 rounded-lg bg-[#d4af5a] hover:bg-[#e5c470] text-slate-950 text-xs font-bold cursor-pointer"
+            >
+              {encounter.disposition === 'Hostile Raider' ? 'Stay Vigilant' : 'Greet Peacefully'}
+            </button>
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-medium cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// PHASE 4: Battle-Dialog-Only 1-10 Multi-Figure Squad Visualization Using Actual Unit Sprites
+export const UnitSquadFigures: React.FC<{
+  hp: number;
+  maxHp: number;
+  predictedHp?: number;
+  accentColor: string;
+  defId?: string;
+  isBarbarian?: boolean;
+}> = ({ hp, maxHp, predictedHp, accentColor, defId, isBarbarian }) => {
+  const currentFigures = Math.max(1, Math.min(10, Math.ceil((hp / Math.max(1, maxHp)) * 10)));
+  const afterFigures =
+    predictedHp !== undefined
+      ? Math.max(0, Math.min(10, Math.ceil((Math.max(0, predictedHp) / Math.max(1, maxHp)) * 10)))
+      : currentFigures;
+  const spriteUrl = getUnitSpriteDataUrl(defId, isBarbarian);
+
+  return (
+    <div className="grid grid-cols-5 gap-1.5 p-2 rounded-lg bg-[#08111a] border border-white/10">
+      {Array.from({ length: 10 }).map((_, idx) => {
+        const aliveNow = idx < currentFigures;
+        const aliveAfter = idx < afterFigures;
+        const willFall = aliveNow && !aliveAfter;
+        const staggerOffset = idx >= 5 ? 'translate-x-1.5' : '';
+        return (
+          <div
+            key={idx}
+            className={`flex items-center justify-center h-8 rounded ${staggerOffset} ${
+              !aliveNow
+                ? 'opacity-10 grayscale'
+                : willFall
+                  ? 'bg-rose-500/20 ring-1 ring-rose-400/50 opacity-70'
+                  : 'bg-white/5'
+            }`}
+            title={willFall ? 'Predicted Casualty' : aliveNow ? 'Active Figure' : 'Lost'}
+          >
+            {spriteUrl ? (
+              <img
+                src={spriteUrl}
+                alt=""
+                className="w-6 h-7 object-contain drop-shadow"
+                style={{
+                  filter: willFall ? 'sepia(1) saturate(4) hue-rotate(-50deg)' : undefined,
+                }}
+              />
+            ) : (
+              <span
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: willFall ? '#fb7185' : aliveNow ? accentColor : '#475569' }}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+export const CombatPreviewModal: React.FC<{
+  preview: CombatPreviewData;
+  onConfirm: () => void;
+  onCancel: () => void;
+}> = ({ preview, onConfirm, onCancel }) => {
+  const forecastStyle =
+    preview.forecast === 'Decisive Victory'
+      ? 'bg-emerald-500/25 text-emerald-300 border-emerald-400/50'
+      : preview.forecast === 'Favorable'
+        ? 'bg-sky-500/25 text-sky-300 border-sky-400/50'
+        : preview.forecast === 'Even Match'
+          ? 'bg-amber-500/25 text-amber-300 border-amber-400/50'
+          : 'bg-rose-500/25 text-rose-300 border-rose-400/50';
+
+  const atkAfterHp = Math.max(0, preview.attackerHp - preview.estCounter);
+  const defAfterHp = Math.max(0, preview.defenderHp - preview.estDamage);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+      <div className="w-full max-w-xl bg-[#0c1822] border border-amber-400/40 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="px-6 py-4 bg-[#132232] border-b border-white/10 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-bold text-[#f8f3e6]">
+            <Swords className="w-4 h-4 text-amber-400" />
+            <span>Combat Engagement Forecast</span>
+          </div>
+          <span className={`px-3 py-0.5 rounded-full text-xs font-bold border ${forecastStyle}`}>
+            {preview.forecast}
+          </span>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            {/* Attacker Card */}
+            <div className="p-3.5 rounded-xl bg-[#0a141e] border border-sky-400/30 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] uppercase tracking-wider text-sky-300 font-semibold">
+                  Attacker
+                </span>
+                <span className="text-xs font-mono-tabular text-slate-300">
+                  {preview.attackerHp} → <span className="text-amber-300">{atkAfterHp}</span> HP
+                </span>
+              </div>
+              <div className="text-sm font-bold text-white">{preview.attackerName}</div>
+              <div className="flex items-center gap-3 text-xs text-slate-300">
+                <span>ATK {preview.attackerAtk}</span>
+                <span>DEF {preview.attackerDef}</span>
+                {preview.estCounter > 0 && (
+                  <span className="text-rose-300 font-semibold">-{preview.estCounter} dmg</span>
+                )}
+              </div>
+              <UnitSquadFigures
+                hp={preview.attackerHp}
+                maxHp={preview.attackerMaxHp}
+                predictedHp={atkAfterHp}
+                accentColor="#38bdf8"
+                defId={preview.attackerDefId}
+              />
+            </div>
+
+            {/* Defender Card */}
+            <div className="p-3.5 rounded-xl bg-[#0a141e] border border-rose-400/30 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] uppercase tracking-wider text-rose-300 font-semibold">
+                  Defender ({preview.defenderKind})
+                </span>
+                <span className="text-xs font-mono-tabular text-slate-300">
+                  {preview.defenderHp} → <span className="text-emerald-300">{defAfterHp}</span> HP
+                </span>
+              </div>
+              <div className="text-sm font-bold text-white">{preview.targetName}</div>
+              <div className="flex items-center gap-3 text-xs text-slate-300">
+                <span>ATK {preview.defenderAtk}</span>
+                <span>DEF {preview.defenderDef}</span>
+                <span className="text-emerald-300 font-semibold">-{preview.estDamage} dmg</span>
+              </div>
+              <UnitSquadFigures
+                hp={preview.defenderHp}
+                maxHp={preview.defenderMaxHp}
+                predictedHp={defAfterHp}
+                accentColor="#fb7185"
+                defId={preview.defenderDefId}
+                isBarbarian={preview.defenderKind === 'barbarian'}
+              />
+            </div>
+          </div>
+
+          {preview.bonuses.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {preview.bonuses.map((b) => (
+                <span
+                  key={b}
+                  className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[11px] text-slate-300"
+                >
+                  {b}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/15 text-slate-300 text-xs font-medium cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              className="px-5 py-2 rounded-lg bg-rose-500 hover:bg-rose-400 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-rose-900/30 cursor-pointer"
+            >
+              <Swords className="w-3.5 h-3.5" />
+              <span>Launch Attack</span>
+            </button>
           </div>
         </div>
       </div>

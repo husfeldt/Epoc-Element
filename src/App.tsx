@@ -5,6 +5,8 @@ import {
   Building2,
   Coins,
   Compass,
+  Eye,
+  EyeOff,
   Flag,
   FolderOpen,
   Hammer,
@@ -21,9 +23,11 @@ import {
 import { CityDrawer } from './components/CityDrawer';
 import { DiplomacyModal } from './components/DiplomacyModal';
 import {
+  CombatPreviewModal,
   DramaticChronicleEvent,
   DramaticChronicleModal,
   ExplorationEventModal,
+  FirstEncounterModal,
   PromotionModal,
   SaveLoadModal,
   SurveyDiscoveryModal,
@@ -39,7 +43,9 @@ import { computeDiscoveryModifiers } from './engine/researchEngine';
 import { soundFx } from './engine/soundFx';
 import { resolveTileShoreline } from './engine/spriteAtlas';
 import {
+  CombatPreviewData,
   SavedGameSlot,
+  previewCombat,
   applyPromotion,
   buyTileForCity,
   clearSavedGame,
@@ -83,6 +89,12 @@ export default function App() {
   const [showTechModal, setShowTechModal] = useState(false);
   const [showDiplomacyModal, setShowDiplomacyModal] = useState(false);
   const [promotingUnitId, setPromotingUnitId] = useState<string | null>(null);
+  const [pendingCombat, setPendingCombat] = useState<{
+    attackerId: string;
+    q: number;
+    r: number;
+    preview: CombatPreviewData;
+  } | null>(null);
   const [chronicleQueue, setChronicleQueue] = useState<DramaticChronicleEvent[]>([]);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -263,26 +275,14 @@ export default function App() {
       return;
     }
 
-    // 2. Attack target if valid
+    // 2. Open Pre-Battle Combat Preview Modal if target is attackable
     if (selectedUnit && attackableKeys.has(k)) {
-      const next = resolveCombat(structuredClone(gameState), selectedUnit.id, q, r);
-      const lastCmb = next.recentCombats[next.recentCombats.length - 1];
-      setGameState(next);
-      soundFx.playCombat(lastCmb?.kind ?? 'melee');
-      if (lastCmb?.kind === 'capture' && lastCmb.capturedCityName) {
-        setChronicleQueue((prev) => [
-          ...prev,
-          {
-            id: `cap_${lastCmb.id}`,
-            kind: 'city_capture',
-            eyebrow: 'Citadel Seized',
-            title: `${lastCmb.capturedCityName} Captured!`,
-            description: `Your forces breached the defenses and raised your standard above ${lastCmb.capturedCityName}.`,
-            accentColor: '#fbbf24',
-          },
-        ]);
+      const pvw = previewCombat(gameState, selectedUnit.id, q, r);
+      if (pvw) {
+        setPendingCombat({ attackerId: selectedUnit.id, q, r, preview: pvw });
+        soundFx.playClick();
+        return;
       }
-      return;
     }
 
     // 3. Move selected unit if reachable
@@ -571,6 +571,31 @@ export default function App() {
             <span>Load</span>
           </button>
           <button
+            onClick={() => {
+              if (!gameState) return;
+              const next: GameState = {
+                ...gameState,
+                config: { ...gameState.config, revealAllMap: !gameState.config.revealAllMap },
+                tiles: { ...gameState.tiles },
+              };
+              updateVisibility(next);
+              setGameState(next);
+            }}
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              gameState.config.revealAllMap
+                ? 'bg-sky-500/25 border-sky-400/50 text-sky-200'
+                : 'bg-white/5 hover:bg-white/10 border-white/15 text-slate-200'
+            }`}
+            title={gameState.config.revealAllMap ? 'Full Map Revealed (Click for Fog of War)' : 'Reveal Entire Map'}
+          >
+            {gameState.config.revealAllMap ? (
+              <Eye className="w-3.5 h-3.5 text-sky-300" />
+            ) : (
+              <EyeOff className="w-3.5 h-3.5 text-slate-400" />
+            )}
+            <span className="hidden lg:inline">{gameState.config.revealAllMap ? 'Map Revealed' : 'Fog of War'}</span>
+          </button>
+          <button
             onClick={() => setShowHelpModal(true)}
             className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 cursor-pointer"
             title="Field Manual"
@@ -714,8 +739,18 @@ export default function App() {
                   )}
                   {inspectedTile.feature !== 'none' && (
                     <div className="text-[11px] text-amber-300">
-                      Feature: {inspectedTile.wonderName || inspectedTile.feature.replace('_', ' ')}{' '}
-                      {inspectedTile.featureSurveyed ? '(Surveyed)' : '(Unsurveyed — Send Explorer)'}
+                      <div>
+                        Feature: {inspectedTile.wonderName || inspectedTile.feature.replace('_', ' ')}{' '}
+                        {inspectedTile.featureSurveyed ? '(Surveyed)' : '(Unsurveyed — Send Explorer)'}
+                      </div>
+                      {inspectedTile.wonderDesc && (
+                        <div className="text-[10px] text-amber-200/80 mt-0.5">{inspectedTile.wonderDesc}</div>
+                      )}
+                    </div>
+                  )}
+                  {inspectedTile.resourceProp && (
+                    <div className="text-[11px] text-amber-200 capitalize">
+                      Landmark / Deposit: {inspectedTile.resourceProp.replace('_', ' ')}
                     </div>
                   )}
                   {inspectedTile.improvement !== 'none' && (
@@ -967,6 +1002,72 @@ export default function App() {
             next.activeSurveyPopup = null;
             setGameState(next);
             soundFx.playClick();
+          }}
+        />
+      )}
+
+      {gameState.activeEncounter && (
+        <FirstEncounterModal
+          encounter={gameState.activeEncounter}
+          onGreet={() => {
+            const next = structuredClone(gameState);
+            next.activeEncounter = null;
+            setGameState(next);
+            soundFx.playDiscovery();
+          }}
+          onOfferTrade={
+            gameState.activeEncounter.kind === 'civ' ||
+            gameState.activeEncounter.disposition === 'Peaceful'
+              ? () => {
+                  const enc = gameState.activeEncounter!;
+                  let next = structuredClone(gameState);
+                  next.activeEncounter = null;
+                  if (enc.kind === 'civ') {
+                    next = establishTradeRoute(next, next.playerCivId, enc.targetId);
+                  } else {
+                    next = tradeWithPeacefulBarbarians(next, enc.targetId);
+                  }
+                  setGameState(next);
+                  soundFx.playDiscovery();
+                }
+              : undefined
+          }
+          onDismiss={() => {
+            const next = structuredClone(gameState);
+            next.activeEncounter = null;
+            setGameState(next);
+            soundFx.playClick();
+          }}
+        />
+      )}
+
+      {pendingCombat && (
+        <CombatPreviewModal
+          preview={pendingCombat.preview}
+          onCancel={() => {
+            setPendingCombat(null);
+            soundFx.playClick();
+          }}
+          onConfirm={() => {
+            const { attackerId, q, r } = pendingCombat;
+            setPendingCombat(null);
+            const next = resolveCombat(structuredClone(gameState), attackerId, q, r);
+            const lastCmb = next.recentCombats[next.recentCombats.length - 1];
+            setGameState(next);
+            soundFx.playCombat(lastCmb?.kind ?? 'melee');
+            if (lastCmb?.kind === 'capture' && lastCmb.capturedCityName) {
+              setChronicleQueue((prev) => [
+                ...prev,
+                {
+                  id: `cap_${lastCmb.id}`,
+                  kind: 'city_capture',
+                  eyebrow: 'Citadel Seized',
+                  title: `${lastCmb.capturedCityName} Captured!`,
+                  description: `Your forces breached the defenses and raised your standard above ${lastCmb.capturedCityName}.`,
+                  accentColor: '#fbbf24',
+                },
+              ]);
+            }
           }}
         />
       )}

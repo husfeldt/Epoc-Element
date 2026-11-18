@@ -1,5 +1,5 @@
 export type MapType = 'continents' | 'archipelago' | 'pangaea' | 'inland_sea' | 'wild_frontier';
-export type MapSize = 'small' | 'medium' | 'large';
+export type MapSize = 'small' | 'medium' | 'large' | 'huge';
 export type TurnPacing = 'quick' | 'standard' | 'epic';
 export type Difficulty = 'explorer' | 'strategist' | 'sovereign';
 
@@ -172,6 +172,8 @@ export interface HexTile {
   feature: NaturalFeatureType;
   featureSurveyed: boolean;
   wonderName?: string;
+  wonderId?: string;
+  wonderDesc?: string;
   improvement: ImprovementType;
   improvementDamaged: boolean;
   hasRoad: boolean;
@@ -185,7 +187,26 @@ export interface HexTile {
   moisture?: number; // 0..1
   isLake?: boolean;
   terrainSubType?: TerrainSubType;
+  forestSpecies?: 'conifer' | 'broadleaf' | 'tropical';
   coastBitmask?: number; // 0..63 6-neighbor water/land mask
+  resourceProp?:
+    | 'cave_entrance'
+    | 'gold'
+    | 'gems'
+    | 'stone'
+    | 'marble'
+    | 'iron'
+    | 'coal'
+    | 'copper'
+    | 'horses'
+    | 'cattle'
+    | 'wheat'
+    | 'spices'
+    | 'timber'
+    | 'fish'
+    | 'whales'
+    | 'mystery_package';
+  hiddenDiscoverySearched?: boolean;
   clusterType?:
     | 'oasis'
     | 'mountain_massif'
@@ -407,6 +428,41 @@ export interface CombatAnimation {
   timestamp: number;
 }
 
+export interface FirstEncounterPopup {
+  id: string;
+  kind: 'civ' | 'barbarian';
+  targetId: string;
+  name: string;
+  leaderOrTribe: string;
+  color: string;
+  disposition: 'Peaceful' | 'Cautious' | 'Hostile Raider';
+  greeting: string;
+  q: number;
+  r: number;
+  emblemSeed: number;
+}
+
+export interface WorldRenderProp {
+  id: string;
+  spriteId?: string;
+  proceduralKind?: string;
+  proceduralTemp?: TemperatureZone;
+  footprint: '1x1' | '2x1' | '3x1' | '7-hex';
+  q: number;
+  r: number;
+  coveredKeys: string[];
+  offsetX: number;
+  offsetY: number;
+  drawWFactor: number;
+  flipX?: boolean;
+  scaleMult?: number;
+  hslFilter?: string;
+  isEmergentWater?: boolean;
+  isForest?: boolean;
+  animKind?: 'fish' | 'whale' | 'herd';
+  animPhase?: number;
+}
+
 export interface GameConfig {
   playerName: string;
   civName: string;
@@ -415,6 +471,7 @@ export interface GameConfig {
   aiCount: number;
   pacing: TurnPacing;
   difficulty: Difficulty;
+  revealAllMap?: boolean;
 }
 
 export interface GameState {
@@ -433,10 +490,15 @@ export interface GameState {
   winnerCivId: string | null;
   activeEvent: ExplorationEvent | null;
   activeSurveyPopup?: SurveyDiscoveryPopup | null;
+  activeEncounter?: FirstEncounterPopup | null;
+  metBarbarianCamps?: Record<string, boolean>;
   notices: ToastNotice[];
   recentCombats: CombatAnimation[];
   recentDisasters?: NaturalDisasterVfx[];
   naturalEventsByAge?: Record<number, number>;
   lastNaturalEventTurn?: number;
+  riverPaths?: Array<Array<{ q: number; r: number; edge: number }>>;
+  rivers?: Array<Array<{ x: number; y: number; width: number; flow: number }>>;
+  renderProps?: WorldRenderProp[];
   seed: number;
 }

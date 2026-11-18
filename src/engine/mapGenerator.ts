@@ -13,8 +13,16 @@ import {
   TerrainSubType,
   UnitState,
 } from '../types/game';
-import { hexDistance, hexInRange, hexNeighbors, tileKey } from './hexMath';
+import {
+  HEX_SIZE,
+  axialToPixel,
+  hexDistance,
+  hexInRange,
+  hexNeighbors,
+  tileKey,
+} from './hexMath';
 import { fbm2D, ridgedNoise2D } from './noise';
+import { buildWorldRenderProps } from './terrainRenderer';
 
 const AI_CIV_PRESETS: Array<{
   id: string;
@@ -104,9 +112,10 @@ function createRng(seed: number) {
 }
 
 function getDimensions(size: GameConfig['mapSize']): { width: number; height: number } {
-  if (size === 'small') return { width: 26, height: 18 };
-  if (size === 'large') return { width: 42, height: 28 };
-  return { width: 34, height: 22 };
+  if (size === 'small') return { width: 40, height: 26 };
+  if (size === 'large') return { width: 72, height: 46 };
+  if (size === 'huge') return { width: 90, height: 58 };
+  return { width: 56, height: 36 };
 }
 
 function offsetToAxial(col: number, row: number): { q: number; r: number } {
@@ -126,13 +135,13 @@ export function generateWorld(config: GameConfig): GameState {
   const moistSeed = seed * 7 + 53;
   const tempSeed = seed * 11 + 79;
 
-  // Map-type macro shaping + domain-warped fBm continents & tectonic ridges
+  // Map-type macro shaping + domain-warped fBm continents & tectonic ridges (15-30+ hex macro-clusters)
   const elevScale =
     config.mapType === 'archipelago'
-      ? 0.165
+      ? 0.078
       : config.mapType === 'pangaea'
-        ? 0.085
-        : 0.115;
+        ? 0.040
+        : 0.050;
 
   const tiles: Record<string, HexTile> = {};
   const landCoords: Array<{ q: number; r: number; col: number; row: number }> = [];
@@ -140,20 +149,20 @@ export function generateWorld(config: GameConfig): GameState {
   const latMap = new Map<string, number>();
   const rawElevMap = new Map<string, number>();
 
-  // Pass 1: Continuous Elevation & Latitude Temperature fields
+  // Pass 1: Domain-Warped Continuous Elevation & Latitude Temperature fields
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
       const { q, r } = offsetToAxial(col, row);
       const key = tileKey(q, r);
 
-      // Domain warp for organic coastlines
-      const warpX = (fbm2D(col * 0.08, row * 0.08, elevSeed + 101, 2) - 0.5) * 3.2;
-      const warpY = (fbm2D(col * 0.08, row * 0.08, elevSeed + 202, 2) - 0.5) * 3.2;
+      // Low-frequency domain warp for organic continents & macro climate basins
+      const warpX = (fbm2D(col * 0.024, row * 0.024, elevSeed + 101, 2) - 0.5) * 7.5;
+      const warpY = (fbm2D(col * 0.024, row * 0.024, elevSeed + 202, 2) - 0.5) * 7.5;
       const wx = (col + warpX) * elevScale;
       const wy = (row + warpY) * elevScale;
 
       let elev = fbm2D(wx, wy, elevSeed, 4, 2.05, 0.52) * 1.15;
-      const ridge = ridgedNoise2D(wx * 1.25, wy * 1.25, ridgeSeed, 3);
+      const ridge = ridgedNoise2D(wx * 1.15, wy * 1.15, ridgeSeed, 3);
 
       // Tectonic ridges boost highland chains where base continent is already above sea level
       if (elev > 0.48 && ridge > 0.52) {
@@ -187,22 +196,26 @@ export function generateWorld(config: GameConfig): GameState {
 
       rawElevMap.set(key, elev);
 
-      // Latitude temperature cooling toward poles (0 = equator, 1 = poles)
+      // Domain-warped Latitude temperature cooling toward poles (0 = equator, 1 = poles)
       const baseLat = Math.abs(row / Math.max(1, height - 1) - 0.5) * 2;
-      const tempNoise = (fbm2D(col * 0.1, row * 0.1, tempSeed, 3) - 0.5) * 0.14;
+      const tWarpX = (fbm2D(col * 0.022, row * 0.022, tempSeed + 31, 2) - 0.5) * 6.0;
+      const tWarpY = (fbm2D(col * 0.022, row * 0.022, tempSeed + 67, 2) - 0.5) * 6.0;
+      const tempNoise = (fbm2D((col + tWarpX) * 0.028, (row + tWarpY) * 0.028, tempSeed, 3) - 0.5) * 0.14;
       const effLat = Math.max(0, Math.min(1, baseLat + tempNoise));
       latMap.set(key, effLat);
     }
   }
 
-  // Pass 2: Moisture field with orographic rain-shadow drying behind mountain chains
+  // Pass 2: Domain-Warped Macro-Scale Moisture field with orographic rain-shadow drying behind mountain chains
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
       const { q, r } = offsetToAxial(col, row);
       const key = tileKey(q, r);
       const elev = rawElevMap.get(key) ?? 0.4;
 
-      let moisture = fbm2D(col * 0.095, row * 0.095, moistSeed, 4, 2.0, 0.52);
+      const mWarpX = (fbm2D(col * 0.020, row * 0.020, moistSeed + 41, 2) - 0.5) * 7.0;
+      const mWarpY = (fbm2D(col * 0.020, row * 0.020, moistSeed + 83, 2) - 0.5) * 7.0;
+      let moisture = fbm2D((col + mWarpX) * 0.024, (row + mWarpY) * 0.024, moistSeed, 4, 2.0, 0.52);
 
       // Check prevailing windward (west/northwest) neighbors for mountain rain-shadow
       let mountainBarrier = 0;
@@ -249,7 +262,7 @@ export function generateWorld(config: GameConfig): GameState {
             biome = 'mountain';
           } else if (elev > 0.82) {
             biome = 'hills';
-          } else if (effLat < 0.85 && moisture > 0.52) {
+          } else if (effLat < 0.85 && moisture > 0.44) {
             biome = 'forest'; // Boreal taiga belt
           } else {
             biome = 'tundra';
@@ -260,7 +273,7 @@ export function generateWorld(config: GameConfig): GameState {
             biome = 'mountain';
           } else if (elev > 0.81) {
             biome = 'hills';
-          } else if (moisture >= 0.52) {
+          } else if (moisture >= 0.43) {
             biome = 'forest';
           } else {
             biome = 'plains';
@@ -269,7 +282,7 @@ export function generateWorld(config: GameConfig): GameState {
           if (moisture < 0.42) {
             temperature = 'arid';
             biome = elev > 1.0 ? 'mountain' : elev > 0.83 ? 'hills' : 'desert';
-          } else if (moisture < 0.58) {
+          } else if (moisture < 0.50) {
             temperature = effLat >= 0.27 ? 'temperate' : 'arid';
             biome = elev > 0.99 ? 'mountain' : elev > 0.81 ? 'hills' : 'plains';
           } else {
@@ -286,7 +299,7 @@ export function generateWorld(config: GameConfig): GameState {
               biome = 'mountain';
             } else if (elev > 0.82) {
               biome = 'hills';
-            } else if (moisture >= 0.48) {
+            } else if (moisture >= 0.41) {
               biome = 'forest';
             } else {
               biome = 'plains';
@@ -298,20 +311,33 @@ export function generateWorld(config: GameConfig): GameState {
       let feature: NaturalFeatureType = 'none';
       if (biome !== 'ocean' && biome !== 'coast' && biome !== 'mountain') {
         const fRoll = rng();
-        if (fRoll < 0.035) feature = 'coal';
-        else if (fRoll < 0.068) feature = 'iron';
-        else if (fRoll < 0.098) feature = 'copper';
-        else if (fRoll < 0.14) feature = 'rare_flora';
-        else if (fRoll < 0.17) feature = 'fossils';
-        else if (fRoll < 0.205) feature = 'ancient_ruins';
-        else if (fRoll < 0.222) feature = 'geothermal_vent';
+        if (biome === 'hills') {
+          if (fRoll < 0.045) feature = 'coal';
+          else if (fRoll < 0.090) feature = 'iron';
+          else if (fRoll < 0.130) feature = 'copper';
+          else if (fRoll < 0.155) feature = 'geothermal_vent';
+        } else {
+          if (fRoll < 0.040) feature = 'rare_flora';
+          else if (fRoll < 0.068) feature = 'fossils';
+          else if (fRoll < 0.092) feature = 'ancient_ruins';
+        }
       }
+
+      // Low-frequency Forest Species Noise Field (8-18 hex regional conifer vs. broadleaf belts)
+      const speciesNoise = fbm2D(col * 0.032, row * 0.032, seed * 13 + 97, 3);
+      const forestSpecies: HexTile['forestSpecies'] =
+        temperature === 'tropical'
+          ? 'tropical'
+          : temperature === 'arctic' || effLat >= 0.66 || speciesNoise < 0.48
+            ? 'conifer'
+            : 'broadleaf';
 
       tiles[key] = {
         q,
         r,
         biome,
         temperature,
+        forestSpecies,
         elevation: Math.max(0, Math.min(1, elev / 1.35)),
         moisture,
         feature,
@@ -333,10 +359,10 @@ export function generateWorld(config: GameConfig): GameState {
     }
   }
 
-  // Regional Biome Clustering & Climate Transition Smoothing (2 cellular-automata passes)
-  // Consolidates scattered single tiles into large forests, expansive deserts, broad grasslands,
+  // Regional Biome Clustering & Climate Transition Smoothing (3 cellular-automata passes)
+  // Consolidates scattered single tiles into large 15-30+ hex forests, expansive deserts, broad grasslands,
   // and ensures smooth foothills/transitions between desert and grass hills.
-  for (let pass = 0; pass < 2; pass++) {
+  for (let pass = 0; pass < 3; pass++) {
     const updates: Array<{ key: string; biome: BiomeType; temperature: TemperatureZone }> = [];
     for (const c of landCoords) {
       const k = tileKey(c.q, c.r);
@@ -388,6 +414,114 @@ export function generateWorld(config: GameConfig): GameState {
     }
   }
 
+  // Minimum-Region Pruning Pass: absorb isolated 1-2 hex land biome pockets
+  // (e.g. a lone desert or swamp/forest hex surrounded by temperate plains) into their majority neighbor biome.
+  {
+    const visited = new Set<string>();
+    for (const c of landCoords) {
+      const startKey = tileKey(c.q, c.r);
+      if (visited.has(startKey)) continue;
+      const startTile = tiles[startKey];
+      if (
+        !startTile ||
+        startTile.biome === 'ocean' ||
+        startTile.biome === 'coast' ||
+        startTile.biome === 'mountain'
+      ) {
+        continue;
+      }
+
+      // Flood-fill connected component of same biome
+      const targetBiome = startTile.biome;
+      const component: string[] = [];
+      const queue: string[] = [startKey];
+      visited.add(startKey);
+
+      while (queue.length > 0) {
+        const curKey = queue.pop()!;
+        component.push(curKey);
+        const curTile = tiles[curKey];
+        for (const n of hexNeighbors(curTile.q, curTile.r)) {
+          const nk = tileKey(n.q, n.r);
+          if (visited.has(nk)) continue;
+          const nt = tiles[nk];
+          if (nt && nt.biome === targetBiome) {
+            visited.add(nk);
+            queue.push(nk);
+          }
+        }
+      }
+
+      if (component.length <= 3) {
+        const neighborCounts = new Map<BiomeType, { count: number; temp: TemperatureZone }>();
+        for (const compKey of component) {
+          const ct = tiles[compKey];
+          const effLat = latMap.get(compKey) ?? 0.5;
+          for (const n of hexNeighbors(ct.q, ct.r)) {
+            const nt = tiles[tileKey(n.q, n.r)];
+            if (
+              !nt ||
+              nt.biome === 'ocean' ||
+              nt.biome === 'coast' ||
+              nt.biome === 'mountain' ||
+              nt.biome === targetBiome
+            ) {
+              continue;
+            }
+            if (nt.biome === 'tundra' && effLat < 0.65) continue;
+            if (nt.biome === 'desert' && effLat > 0.45) continue;
+            const prev = neighborCounts.get(nt.biome);
+            neighborCounts.set(nt.biome, {
+              count: (prev?.count ?? 0) + 1,
+              temp: nt.temperature,
+            });
+          }
+        }
+        let bestBiome: BiomeType | null = null;
+        let bestTemp: TemperatureZone = startTile.temperature;
+        let bestCount = 0;
+        for (const [bType, info] of neighborCounts.entries()) {
+          if (info.count > bestCount) {
+            bestCount = info.count;
+            bestBiome = bType;
+            bestTemp = info.temp;
+          }
+        }
+        if (bestBiome) {
+          for (const compKey of component) {
+            tiles[compKey].biome = bestBiome;
+            tiles[compKey].temperature = bestTemp;
+          }
+        }
+      }
+    }
+  }
+
+  // Strict Latitude/Temperature Banding Validator (separate Tropical palms from Arctic snow pines by >=4-6 temperate hexes)
+  for (const c of landCoords) {
+    const k = tileKey(c.q, c.r);
+    const tile = tiles[k];
+    if (!tile || tile.biome === 'ocean' || tile.biome === 'coast') continue;
+    const effLat = latMap.get(k) ?? 0.5;
+    if (tile.temperature === 'tropical' && effLat >= 0.34) {
+      tile.temperature = 'temperate';
+      tile.forestSpecies = 'broadleaf';
+    } else if (tile.temperature === 'arctic' && effLat < 0.62) {
+      tile.temperature = 'temperate';
+      tile.forestSpecies = 'conifer';
+    }
+    if (tile.temperature === 'tropical') {
+      const nearArctic = hexInRange(tile.q, tile.r, 4).some((rc) => {
+        const rt = tiles[tileKey(rc.q, rc.r)];
+        return rt && rt.temperature === 'arctic';
+      });
+      if (nearArctic) {
+        tile.temperature = 'temperate';
+        tile.forestSpecies = 'broadleaf';
+      }
+    }
+  }
+
   // Foothill & Ecotone Pass:
   // 1) Mountain ranges naturally step down through hills before flat plains/desert.
   // 2) Where arid desert meets temperate forest, place a natural grass-hills / steppe transition buffer.
@@ -417,6 +551,47 @@ export function generateWorld(config: GameConfig): GameState {
       if (hasTemperateForest && !hasGrassHills) {
         tile.biome = 'hills';
         tile.temperature = 'temperate';
+      }
+    }
+  }
+
+  // Mountain Pass Carving: ensure connected tectonic mountain chains have navigable passes every 5-7 hexes
+  {
+    const mtnVisited = new Set<string>();
+    for (const tile of Object.values(tiles)) {
+      const startKey = tileKey(tile.q, tile.r);
+      if (tile.biome !== 'mountain' || mtnVisited.has(startKey)) continue;
+      const chain: HexTile[] = [];
+      const qStack: HexTile[] = [tile];
+      mtnVisited.add(startKey);
+      while (qStack.length > 0) {
+        const cur = qStack.pop()!;
+        chain.push(cur);
+        for (const n of hexNeighbors(cur.q, cur.r)) {
+          const nk = tileKey(n.q, n.r);
+          if (mtnVisited.has(nk)) continue;
+          const nt = tiles[nk];
+          if (nt && nt.biome === 'mountain') {
+            mtnVisited.add(nk);
+            qStack.push(nt);
+          }
+        }
+      }
+      if (chain.length >= 6) {
+        for (let idx = 5; idx < chain.length; idx += 6) {
+          const passTile = chain[idx];
+          const nList = hexNeighbors(passTile.q, passTile.r)
+            .map((n) => tiles[tileKey(n.q, n.r)])
+            .filter((nt): nt is HexTile => Boolean(nt));
+          const passableNeighbors = nList.filter(
+            (nt) => nt.biome !== 'mountain' && nt.biome !== 'ocean' && nt.biome !== 'coast'
+          ).length;
+          if (passableNeighbors >= 2) {
+            passTile.biome = 'hills';
+            passTile.elevation = Math.min(passTile.elevation, 0.72);
+            passTile.clusterRole = 'outer_ring';
+          }
+        }
       }
     }
   }
@@ -662,8 +837,100 @@ export function generateWorld(config: GameConfig): GameState {
     }
   }
 
-  // Generate winding downhill rivers along hex edges from highlands/mountains to coast or inland lakes
-  generateRivers(tiles, rng, config.mapSize);
+  // Guarantee 2-5 hex contiguous inland freshwater lakes before river routing
+  {
+    const existingLakes = Object.values(tiles).filter((t) => t.isLake).length;
+    const targetLakes =
+      config.mapSize === 'huge' ? 5 : config.mapSize === 'large' ? 4 : config.mapSize === 'medium' ? 3 : 2;
+    if (existingLakes < targetLakes * 2) {
+      const lakeCenters = Object.values(tiles).filter(
+        (t) =>
+          (t.biome === 'plains' || t.biome === 'forest') &&
+          t.temperature !== 'arid' &&
+          t.elevation < 0.62 &&
+          t.feature === 'none' &&
+          hexInRange(t.q, t.r, 3).every((c) => {
+            const nt = tiles[tileKey(c.q, c.r)];
+            return nt && nt.biome !== 'ocean' && nt.biome !== 'coast';
+          })
+      );
+      let lakesCreated = 0;
+      for (let tries = 0; tries < 80 && lakesCreated < targetLakes; tries++) {
+        const center = lakeCenters[Math.floor(rng() * lakeCenters.length)];
+        if (!center || center.isLake) continue;
+        center.biome = 'coast';
+        center.temperature = 'ocean';
+        center.isLake = true;
+        center.shoreline = 'sandy_beach';
+        center.elevation = 0.25;
+        const nList = hexNeighbors(center.q, center.r)
+          .map((n) => tiles[tileKey(n.q, n.r)])
+          .filter((nt): nt is HexTile => Boolean(nt && nt.biome !== 'mountain' && nt.feature === 'none'));
+        const lakeSize = 1 + Math.floor(rng() * 3);
+        for (let k = 0; k < Math.min(lakeSize, nList.length); k++) {
+          nList[k].biome = 'coast';
+          nList[k].temperature = 'ocean';
+          nList[k].isLake = true;
+          nList[k].shoreline = 'sandy_beach';
+          nList[k].elevation = 0.25;
+        }
+        lakesCreated++;
+      }
+    }
+  }
+
+  // Phase 4: Flood-Fill Lake Classification (< 16 contiguous enclosed water tiles -> Freshwater LAKE)
+  {
+    const waterVisited = new Set<string>();
+    const edgeKeys = new Set<string>();
+    for (let row = 0; row < height; row++) {
+      for (let col = 0; col < width; col++) {
+        if (row === 0 || row === height - 1 || col === 0 || col === width - 1) {
+          const ax = offsetToAxial(col, row);
+          edgeKeys.add(tileKey(ax.q, ax.r));
+        }
+      }
+    }
+
+    for (const tile of Object.values(tiles)) {
+      const startKey = tileKey(tile.q, tile.r);
+      if (waterVisited.has(startKey)) continue;
+      if (tile.biome !== 'ocean' && tile.biome !== 'coast') continue;
+
+      const comp: HexTile[] = [];
+      const queue: HexTile[] = [tile];
+      waterVisited.add(startKey);
+      let touchesBorder = edgeKeys.has(startKey);
+
+      while (queue.length > 0) {
+        const cur = queue.pop()!;
+        comp.push(cur);
+        for (const n of hexNeighbors(cur.q, cur.r)) {
+          const nk = tileKey(n.q, n.r);
+          if (waterVisited.has(nk)) continue;
+          const nt = tiles[nk];
+          if (nt && (nt.biome === 'ocean' || nt.biome === 'coast')) {
+            waterVisited.add(nk);
+            if (edgeKeys.has(nk)) touchesBorder = true;
+            queue.push(nt);
+          }
+        }
+      }
+
+      const isEnclosedLake = !touchesBorder && comp.length < 16;
+      for (const wt of comp) {
+        wt.isLake = isEnclosedLake;
+        if (isEnclosedLake) {
+          wt.biome = 'coast';
+          wt.temperature = 'ocean';
+          wt.shoreline = 'sandy_beach';
+        }
+      }
+    }
+  }
+
+  // Generate continuous source-to-sea meandering rivers via hex-vertex Priority-Flood graph
+  const { riverPaths, rivers } = generateRivers(tiles, rng, config.mapSize);
 
   // Generate multi-tile coastal clusters & diverse shoreline types (sandy beaches, rocky shores, high cliffs, coastal swamps, coral reefs, icy shores)
   generateShorelinesAndCoastalClusters(tiles, height, rng, config.mapSize);
@@ -671,19 +938,100 @@ export function generateWorld(config: GameConfig): GameState {
   // Assign deterministic terrainSubType & 6-neighbor coastBitmask (0..63) for every tile
   finalizeTileRenderMetadata(tiles, height);
 
-  // Place 2-4 Natural Wonders on scenic land tiles
-  const wonderCount = config.mapSize === 'large' ? 4 : config.mapSize === 'medium' ? 3 : 2;
-  const wonderPool = [...WONDER_NAMES].sort(() => rng() - 0.5);
-  let placedWonders = 0;
-  for (let i = 0; i < 60 && placedWonders < wonderCount; i++) {
-    const pick = landCoords[Math.floor(rng() * landCoords.length)];
-    if (!pick) break;
-    const t = tiles[tileKey(pick.q, pick.r)];
-    if (t.feature === 'none') {
-      t.feature = 'natural_wonder';
-      t.wonderName = wonderPool[placedWonders];
-      placedWonders++;
-    }
+  // Phase 3: Place 4-8 Unique Natural Wonders & Ancient World Wonders (at most once each, >=12 hexes apart)
+  const WONDER_CATALOG: Array<{
+    id: string;
+    name: string;
+    desc: string;
+    match: (t: HexTile) => boolean;
+  }> = [
+    {
+      id: 'wonder_mount_celestial',
+      name: 'Mount Celestial',
+      desc: 'Sacred twin-peak alpine massif with glacial waterfalls (+3 Gold, +3 Science).',
+      match: (t) => t.biome === 'hills' || t.biome === 'mountain',
+    },
+    {
+      id: 'wonder_sunken_emerald_canyon',
+      name: 'The Sunken Emerald Canyon',
+      desc: 'Terraced gorge carved with turquoise river pools (+3 Gold, +3 Science).',
+      match: (t) => (t.biome === 'plains' || t.biome === 'hills') && t.temperature !== 'arctic',
+    },
+    {
+      id: 'wonder_great_sapphire_atoll',
+      name: 'The Great Sapphire Atoll',
+      desc: 'Vibrant circular coral lagoon reef in tropical shallows (+3 Gold, +3 Science).',
+      match: (t) => t.biome === 'coast' && t.temperature !== 'arctic' && !t.isLake,
+    },
+    {
+      id: 'wonder_crimson_pillar_mesas',
+      name: 'Crimson Pillar Mesas',
+      desc: 'Monumental red-rock desert spires and natural stone arch (+3 Gold, +3 Science).',
+      match: (t) => t.biome === 'desert' || (t.biome === 'hills' && t.temperature === 'arid'),
+    },
+    {
+      id: 'wonder_overgrown_sun_ziggurat',
+      name: 'The Overgrown Sun Ziggurat',
+      desc: 'Ancient stepped stone pyramid reclaimed by jungle vines (+3 Gold, +3 Science).',
+      match: (t) => t.biome === 'forest' && t.temperature === 'tropical',
+    },
+    {
+      id: 'wonder_colossus_of_the_coast',
+      name: 'Colossus of the Coast',
+      desc: 'Weathered ancient giant stone statue overlooking a coastal bay (+3 Gold, +3 Science).',
+      match: (t) =>
+        t.biome !== 'ocean' &&
+        t.biome !== 'coast' &&
+        t.biome !== 'mountain' &&
+        hexNeighbors(t.q, t.r).some((n) => tiles[tileKey(n.q, n.r)]?.biome === 'coast'),
+    },
+    {
+      id: 'wonder_astral_monolith_ring',
+      name: 'The Astral Monolith Ring',
+      desc: 'Ancient standing stone circle aligned to the stars (+3 Gold, +3 Science).',
+      match: (t) =>
+        (t.biome === 'hills' || t.biome === 'plains') && t.temperature === 'temperate',
+    },
+    {
+      id: 'wonder_petrified_leviathan',
+      name: 'The Petrified Leviathan',
+      desc: 'Colossal fossilized ridge half-buried in arid steppe (+3 Gold, +3 Science).',
+      match: (t) => t.biome === 'desert' || (t.biome === 'plains' && t.temperature === 'arid'),
+    },
+  ];
+
+  const wonderTarget = config.mapSize === 'large' ? 8 : config.mapSize === 'medium' ? 6 : 4;
+  const shuffledWonders = [...WONDER_CATALOG].sort(() => rng() - 0.5);
+  const placedWonderCoords: HexTile[] = [];
+  const allTileList = Object.values(tiles);
+
+  for (const wDef of shuffledWonders) {
+    if (placedWonderCoords.length >= wonderTarget) break;
+    const candidates = allTileList.filter(
+      (t) =>
+        t.feature === 'none' &&
+        !t.resourceProp &&
+        wDef.match(t) &&
+        placedWonderCoords.every((pw) => hexDistance(pw.q, pw.r, t.q, t.r) >= 12)
+    );
+    const fallbackCandidates =
+      candidates.length > 0
+        ? candidates
+        : allTileList.filter(
+            (t) =>
+              t.feature === 'none' &&
+              t.biome !== 'ocean' &&
+              t.biome !== 'coast' &&
+              t.biome !== 'mountain' &&
+              placedWonderCoords.every((pw) => hexDistance(pw.q, pw.r, t.q, t.r) >= 12)
+          );
+    if (fallbackCandidates.length === 0) continue;
+    const pick = fallbackCandidates[Math.floor(rng() * fallbackCandidates.length)];
+    pick.feature = 'natural_wonder';
+    pick.wonderId = wDef.id;
+    pick.wonderName = wDef.name;
+    pick.wonderDesc = wDef.desc;
+    placedWonderCoords.push(pick);
   }
 
   // Compute connected passable land regions via BFS so starting units are never trapped
@@ -972,12 +1320,27 @@ export function generateWorld(config: GameConfig): GameState {
   const campTarget = config.mapSize === 'large' ? 10 : config.mapSize === 'medium' ? 7 : 5;
   let campsPlaced = 0;
 
-  for (let tries = 0; tries < 140 && campsPlaced < campTarget; tries++) {
+  for (let tries = 0; tries < 220 && campsPlaced < campTarget; tries++) {
     const cand = landCoords[Math.floor(rng() * landCoords.length)];
     if (!cand) continue;
     const t = tiles[tileKey(cand.q, cand.r)];
-    if (t.ownerCityId || t.feature === 'natural_wonder') continue;
-    const tooCloseToStart = startTiles.some((st) => hexDistance(st.q, st.r, t.q, t.r) < 5);
+    if (t.ownerCityId || t.feature === 'natural_wonder' || t.biome === 'mountain') continue;
+
+    // Frontier-only placement: hills, tundra, arid steppe, or forest perimeter
+    const isForestEdge =
+      t.biome === 'forest' &&
+      hexNeighbors(t.q, t.r).some((n) => {
+        const nt = tiles[tileKey(n.q, n.r)];
+        return nt && nt.biome !== 'forest';
+      });
+    const isFrontier =
+      t.biome === 'hills' ||
+      t.biome === 'tundra' ||
+      t.temperature === 'arid' ||
+      isForestEdge;
+    if (!isFrontier && tries < 160) continue;
+
+    const tooCloseToStart = startTiles.some((st) => hexDistance(st.q, st.r, t.q, t.r) < 6);
     const tooCloseToCamp = Object.values(barbarianCamps).some(
       (c) => hexDistance(c.q, c.r, t.q, t.r) < 4
     );
@@ -1046,8 +1409,18 @@ export function generateWorld(config: GameConfig): GameState {
       },
     ],
     recentCombats: [],
+    riverPaths,
+    rivers,
+    renderProps: buildWorldRenderProps(tiles, width, height),
     seed,
   };
+
+  if (config.revealAllMap) {
+    for (const t of Object.values(tiles)) {
+      t.exploredBy[playerCivId] = true;
+      t.visibleTo[playerCivId] = true;
+    }
+  }
 
   return state;
 }
@@ -1066,100 +1439,252 @@ function generateRivers(
   tiles: Record<string, HexTile>,
   rng: () => number,
   mapSize: GameConfig['mapSize']
-) {
-  const sources = Object.values(tiles).filter(
-    (t) =>
-      (t.biome === 'mountain' || t.biome === 'hills') &&
-      t.temperature !== 'arid' &&
-      !hexNeighbors(t.q, t.r).some((n) => {
-        const nt = tiles[tileKey(n.q, n.r)];
-        return nt && (nt.biome === 'coast' || nt.biome === 'ocean');
-      })
+): {
+  riverPaths: Array<Array<{ q: number; r: number; edge: number }>>;
+  rivers: Array<Array<{ x: number; y: number; width: number; flow: number }>>;
+} {
+  const waterTargets = Object.values(tiles).filter(
+    (t) => t.biome === 'coast' || t.biome === 'ocean' || Boolean(t.isLake)
   );
+  if (waterTargets.length === 0) return { riverPaths: [], rivers: [] };
 
-  const targetRivers = mapSize === 'large' ? 11 : mapSize === 'medium' ? 8 : 5;
-  const shuffled = [...sources].sort(() => rng() - 0.5);
-  let created = 0;
-
-  for (const src of shuffled) {
-    if (created >= targetRivers) break;
-    if (src.hasRiver) continue;
-
-    // Pick initial edge between src and a land neighbor
-    let curTile = src;
-    let curEdge = Math.floor(rng() * 6);
-    const [dq, dr] = EDGE_OFFSETS[curEdge];
-    const firstNeighbor = tiles[tileKey(curTile.q + dq, curTile.r + dr)];
-    if (!firstNeighbor || firstNeighbor.biome === 'ocean' || firstNeighbor.biome === 'coast') {
-      continue;
-    }
-
-    let steps = 0;
-    let reachedSea = false;
-    while (steps < 16) {
-      const [ndq, ndr] = EDGE_OFFSETS[curEdge];
-      const oppTile = tiles[tileKey(curTile.q + ndq, curTile.r + ndr)];
-      if (!oppTile) break;
-
-      const curIsWater = curTile.biome === 'coast' || curTile.biome === 'ocean';
-      const oppIsWater = oppTile.biome === 'coast' || oppTile.biome === 'ocean';
-
-      if (curIsWater && oppIsWater) {
-        reachedSea = true;
-        break;
-      }
-
-      if (!curTile.riverEdges) curTile.riverEdges = [false, false, false, false, false, false];
-      if (!oppTile.riverEdges) oppTile.riverEdges = [false, false, false, false, false, false];
-
-      if (curTile.riverEdges[curEdge]) {
-        // Merged into another river
-        reachedSea = true;
-        break;
-      }
-
-      curTile.riverEdges[curEdge] = true;
-      oppTile.riverEdges[(curEdge + 3) % 6] = true;
-      if (!curIsWater) curTile.hasRiver = true;
-      if (!oppIsWater) oppTile.hasRiver = true;
-
-      if (curIsWater || oppIsWater) {
-        reachedSea = true;
-        break;
-      }
-
-      // Advance along endpoint corner (curEdge + 1) % 6 -> two candidate outgoing edges
-      const optA = { tile: curTile, edge: (curEdge + 1) % 6 };
-      const optB = { tile: oppTile, edge: (curEdge + 2) % 6 };
-
-      const scoreCandidate = (cand: { tile: HexTile; edge: number }) => {
-        const [cdq, cdr] = EDGE_OFFSETS[cand.edge];
-        const other = tiles[tileKey(cand.tile.q + cdq, cand.tile.r + cdr)];
-        if (!other) return -999;
-        if (cand.tile.riverEdges?.[cand.edge]) return -50;
-        const avgElev = (cand.tile.elevation + other.elevation) * 0.5;
-        const waterBonus =
-          other.biome === 'coast' ||
-          other.biome === 'ocean' ||
-          cand.tile.biome === 'coast' ||
-          cand.tile.biome === 'ocean'
-            ? 2.0
-            : 0;
-        return waterBonus - avgElev + (rng() - 0.5) * 0.28;
-      };
-
-      const sA = scoreCandidate(optA);
-      const sB = scoreCandidate(optB);
-      const chosen = sA >= sB ? optA : optB;
-      curTile = chosen.tile;
-      curEdge = chosen.edge;
-      steps++;
-    }
-
-    if (reachedSea || steps >= 4) {
-      created++;
+  // 1. Priority-Flood / BFS Hydrological Distance & Depression-Breached Elevation Potential
+  const waterDistMap = new Map<string, number>();
+  const bfsQueue: HexTile[] = [];
+  for (const wt of waterTargets) {
+    const wk = tileKey(wt.q, wt.r);
+    waterDistMap.set(wk, 0);
+    bfsQueue.push(wt);
+  }
+  let qHead = 0;
+  while (qHead < bfsQueue.length) {
+    const cur = bfsQueue[qHead++];
+    const curD = waterDistMap.get(tileKey(cur.q, cur.r)) ?? 0;
+    for (const n of hexNeighbors(cur.q, cur.r)) {
+      const nk = tileKey(n.q, n.r);
+      const nt = tiles[nk];
+      if (!nt || waterDistMap.has(nk)) continue;
+      waterDistMap.set(nk, curD + 1);
+      bfsQueue.push(nt);
     }
   }
+
+  // 2. Build Hex-Vertex Graph across all tiles so rivers flow vertex-to-vertex without ever reversing
+  interface VertexEdgeLink {
+    toKey: string;
+    tileA: HexTile;
+    tileB?: HexTile;
+    edgeA: number;
+  }
+  interface HexVertexNode {
+    key: string;
+    x: number;
+    y: number;
+    touchingTiles: HexTile[];
+    isWaterVertex: boolean;
+     isPureOcean: boolean;
+    waterDist: number;
+    potential: number;
+    links: VertexEdgeLink[];
+  }
+
+  const vertices = new Map<string, HexVertexNode>();
+  const getCornerPos = (px: number, py: number, cIdx: number) => {
+    const angle = (Math.PI / 180) * (60 * cIdx - 30);
+    const vx = px + HEX_SIZE * Math.cos(angle);
+    const vy = py + HEX_SIZE * Math.sin(angle);
+    const key = `${Math.round(vx * 2)},${Math.round(vy * 2)}`;
+    return { key, x: vx, y: vy };
+  };
+
+  const ensureVertex = (key: string, x: number, y: number): HexVertexNode => {
+    let v = vertices.get(key);
+    if (!v) {
+      v = {
+        key,
+        x,
+        y,
+        touchingTiles: [],
+        isWaterVertex: false,
+        isPureOcean: false,
+        waterDist: 999,
+        potential: 999,
+        links: [],
+      };
+      vertices.set(key, v);
+    }
+    return v;
+  };
+
+  for (const t of Object.values(tiles)) {
+    const { x: px, y: py } = axialToPixel(t.q, t.r, 'topdown');
+    const cNodes: HexVertexNode[] = [];
+    for (let c = 0; c < 6; c++) {
+      const cp = getCornerPos(px, py, c);
+      const vn = ensureVertex(cp.key, cp.x, cp.y);
+      if (!vn.touchingTiles.includes(t)) {
+        vn.touchingTiles.push(t);
+      }
+      cNodes.push(vn);
+    }
+    for (let e = 0; e < 6; e++) {
+      const vA = cNodes[e];
+      const vB = cNodes[(e + 1) % 6];
+      const [dq, dr] = EDGE_OFFSETS[e];
+      const opp = tiles[tileKey(t.q + dq, t.r + dr)];
+      if (!vA.links.some((l) => l.toKey === vB.key)) {
+        vA.links.push({ toKey: vB.key, tileA: t, tileB: opp, edgeA: e });
+      }
+      if (!vB.links.some((l) => l.toKey === vA.key)) {
+        vB.links.push({ toKey: vA.key, tileA: t, tileB: opp, edgeA: e });
+      }
+    }
+  }
+
+  for (const v of vertices.values()) {
+    let minD = 999;
+    let sumElev = 0;
+    let waterCount = 0;
+    for (const tt of v.touchingTiles) {
+      const d = waterDistMap.get(tileKey(tt.q, tt.r)) ?? 99;
+      if (d < minD) minD = d;
+      sumElev += tt.elevation;
+      if (tt.biome === 'coast' || tt.biome === 'ocean' || Boolean(tt.isLake)) {
+        waterCount++;
+      }
+    }
+    const avgElev = sumElev / Math.max(1, v.touchingTiles.length);
+    v.waterDist = minD;
+    v.isWaterVertex = waterCount > 0;
+    v.isPureOcean = waterCount === v.touchingTiles.length;
+    v.potential = minD * 1.35 + avgElev * 0.9;
+  }
+
+  // 3. Collect high-ground river spring tiles (mountains, hills, or inland highlands >=2 hexes from water)
+  let sources = Object.values(tiles).filter(
+    (t) =>
+      (t.biome === 'mountain' || t.biome === 'hills') &&
+      (waterDistMap.get(tileKey(t.q, t.r)) ?? 0) >= 2
+  );
+  if (sources.length < 8) {
+    const extra = Object.values(tiles).filter(
+      (t) =>
+        t.biome !== 'ocean' &&
+        t.biome !== 'coast' &&
+        (waterDistMap.get(tileKey(t.q, t.r)) ?? 0) >= 2
+    );
+    sources = [...sources, ...extra];
+  }
+
+  const targetRivers =
+    mapSize === 'huge' ? 14 : mapSize === 'large' ? 11 : mapSize === 'medium' ? 8 : 6;
+  const shuffled = [...sources].sort((a, b) => b.elevation - a.elevation + (rng() - 0.5) * 0.35);
+
+  const riverPaths: Array<Array<{ q: number; r: number; edge: number }>> = [];
+  const rivers: Array<Array<{ x: number; y: number; width: number; flow: number }>> = [];
+  const globalRiverVertices = new Set<string>();
+  const usedSpringTiles = new Set<string>();
+
+  for (const src of shuffled) {
+    if (rivers.length >= targetRivers) break;
+    const srcKey = tileKey(src.q, src.r);
+    if (src.hasRiver || usedSpringTiles.has(srcKey)) continue;
+    // Space springs at least 3 hexes apart
+    let tooClose = false;
+    for (const uk of usedSpringTiles) {
+      const [uq, ur] = uk.split(',').map(Number);
+      if (hexDistance(src.q, src.r, uq, ur) < 3) {
+        tooClose = true;
+        break;
+      }
+    }
+    if (tooClose) continue;
+
+    const { x: px, y: py } = axialToPixel(src.q, src.r, 'topdown');
+    let startV: HexVertexNode | null = null;
+    for (let c = 0; c < 6; c++) {
+      const cp = getCornerPos(px, py, c);
+      const vn = vertices.get(cp.key);
+      if (vn && !vn.isWaterVertex && (!startV || vn.potential > startV.potential)) {
+        startV = vn;
+      }
+    }
+    if (!startV) continue;
+
+    const vChain: HexVertexNode[] = [startV];
+    const eChain: VertexEdgeLink[] = [];
+    const visitedV = new Set<string>([startV.key]);
+    let curV = startV;
+    let reachedMouth = false;
+
+    for (let step = 0; step < 80; step++) {
+      let bestLink: VertexEdgeLink | null = null;
+      let bestNextV: HexVertexNode | null = null;
+      let bestScore = Infinity;
+
+      for (const link of curV.links) {
+        if (visitedV.has(link.toKey)) continue;
+        const candV = vertices.get(link.toKey);
+        if (!candV || candV.isPureOcean) continue;
+
+        // Strong downhill pull toward water + depression breaching
+        let score = candV.potential + (rng() - 0.5) * 0.28;
+        if (candV.isWaterVertex) score -= 50;
+        else if (globalRiverVertices.has(candV.key)) score -= 25;
+
+        if (score < bestScore) {
+          bestScore = score;
+          bestLink = link;
+          bestNextV = candV;
+        }
+      }
+
+      if (!bestLink || !bestNextV) break;
+
+      visitedV.add(bestNextV.key);
+      vChain.push(bestNextV);
+      eChain.push(bestLink);
+      curV = bestNextV;
+
+      if (curV.isWaterVertex || globalRiverVertices.has(curV.key)) {
+        reachedMouth = eChain.length >= 2;
+        break;
+      }
+    }
+
+    if (reachedMouth && vChain.length >= 3) {
+      usedSpringTiles.add(srcKey);
+      const pathNodes: Array<{ q: number; r: number; edge: number }> = [];
+      for (const seg of eChain) {
+        if (!seg.tileA.riverEdges) seg.tileA.riverEdges = [false, false, false, false, false, false];
+        seg.tileA.riverEdges[seg.edgeA] = true;
+        if (seg.tileA.biome !== 'coast' && seg.tileA.biome !== 'ocean') seg.tileA.hasRiver = true;
+        if (seg.tileB) {
+          if (!seg.tileB.riverEdges) seg.tileB.riverEdges = [false, false, false, false, false, false];
+          seg.tileB.riverEdges[(seg.edgeA + 3) % 6] = true;
+          if (seg.tileB.biome !== 'coast' && seg.tileB.biome !== 'ocean') seg.tileB.hasRiver = true;
+        }
+        pathNodes.push({ q: seg.tileA.q, r: seg.tileA.r, edge: seg.edgeA });
+      }
+      riverPaths.push(pathNodes);
+
+      const riverCoords: Array<{ x: number; y: number; width: number; flow: number }> = [];
+      for (let i = 0; i < vChain.length; i++) {
+        const vn = vChain[i];
+        globalRiverVertices.add(vn.key);
+        const t = i / Math.max(1, vChain.length - 1);
+        riverCoords.push({
+          x: vn.x,
+          y: vn.y,
+          width: 2.5 + Math.pow(t, 1.15) * 9.5,
+          flow: 1 + i,
+        });
+      }
+      rivers.push(riverCoords);
+    }
+  }
+
+  return { riverPaths, rivers };
 }
 
 function generateShorelinesAndCoastalClusters(
@@ -1378,5 +1903,65 @@ function finalizeTileRenderMetadata(tiles: Record<string, HexTile>, height: numb
       }
     }
     tile.terrainSubType = sub;
+
+    // Assign natural 2.5D resource, coastal marine & mystery package props
+    if (!tile.resourceProp && tile.feature === 'none') {
+      const h = Math.abs(Math.sin(tile.q * 12.9898 + tile.r * 78.233) * 43758.5453) % 1;
+      const bordersMtn = hexNeighbors(tile.q, tile.r).some((n) => tiles[tileKey(n.q, n.r)]?.biome === 'mountain');
+      const hasNearbyProp = hexInRange(tile.q, tile.r, 2).some((c) => {
+        const nt = tiles[tileKey(c.q, c.r)];
+        return nt && (nt.resourceProp || nt.feature === 'ancient_ruins');
+      });
+      if (!hasNearbyProp) {
+        const isMoistOrRiver = (tile.moisture ?? 0.4) >= 0.44 || tile.hasRiver;
+        if (tile.biome === 'coast' && !tile.isLake) {
+          if (h < 0.045) tile.resourceProp = 'fish';
+          else if (h < 0.068) tile.resourceProp = 'whales';
+        } else if (tile.biome === 'hills' && bordersMtn) {
+          if (h < 0.025) tile.resourceProp = 'cave_entrance';
+          else if (h < 0.050) tile.resourceProp = 'iron';
+          else if (h < 0.072) tile.resourceProp = 'coal';
+          else if (h < 0.092) tile.resourceProp = 'copper';
+          else if (h < 0.112) tile.resourceProp = 'gold';
+          else if (h < 0.128) tile.resourceProp = 'gems';
+          else if (h < 0.145) tile.resourceProp = 'marble';
+          else if (h < 0.165) tile.resourceProp = 'stone';
+        } else if (tile.biome === 'plains' && tile.terrainSubType !== 'marsh' && isMoistOrRiver) {
+          if (h < 0.035) tile.resourceProp = 'horses';
+          else if (h < 0.070) tile.resourceProp = 'cattle';
+          else if (h < 0.110) tile.resourceProp = 'wheat';
+          else if (h > 0.965 && !tile.ownerCityId) tile.resourceProp = 'mystery_package';
+        } else if (tile.biome === 'forest') {
+          if (tile.temperature === 'tropical' && ((tile.moisture ?? 0.5) >= 0.50 || tile.hasRiver) && h < 0.065) {
+            tile.resourceProp = 'spices';
+          } else if (h < 0.045) {
+            tile.resourceProp = 'timber';
+          } else if (h > 0.965 && !tile.ownerCityId) {
+            tile.resourceProp = 'mystery_package';
+          }
+        } else if ((tile.biome === 'desert' || tile.biome === 'tundra') && h > 0.960 && !tile.ownerCityId) {
+          tile.resourceProp = 'mystery_package';
+        }
+      }
+    }
+  }
+
+  // Enforce >=10-hex minimum spacing between any two anomaly, ruin, or mystery landmarks
+  const keptLandmarks: HexTile[] = [];
+  for (const tile of Object.values(tiles)) {
+    const isAnomaly =
+      tile.feature === 'ancient_ruins' ||
+      tile.feature === 'fossils' ||
+      tile.feature === 'rare_flora' ||
+      tile.feature === 'geothermal_vent';
+    const isMystery = tile.resourceProp === 'mystery_package';
+    if (!isAnomaly && !isMystery) continue;
+
+    if (keptLandmarks.some((r) => hexDistance(r.q, r.r, tile.q, tile.r) < 10)) {
+      if (isAnomaly) tile.feature = 'none';
+      if (isMystery) tile.resourceProp = undefined;
+    } else {
+      keptLandmarks.push(tile);
+    }
   }
 }

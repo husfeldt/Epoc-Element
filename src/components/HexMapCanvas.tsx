@@ -16,12 +16,15 @@ import {
   getUnitMiniatureSprite,
   spriteAtlas,
 } from '../engine/spriteAtlas';
+import { comfyPropAtlas } from '../engine/comfyPropAtlas';
 import {
   YSortedDrawable,
   collectTerrainFeatureDrawables,
+  drawComfyCityOrCampSprite,
   renderAtmosphericPostProcess,
   renderBakedWorldTerrainLayer,
   renderCartographicFog,
+  renderOverCanopyHexGrid,
 } from '../engine/terrainRenderer';
 import { BakedWorldTerrain, bakeWorldTerrain } from '../engine/worldTerrainBaker';
 import { getTilePurchaseCost, previewCombat } from '../engine/turnEngine';
@@ -96,7 +99,7 @@ const BATTLE_FX_DURATION_MS = 850;
 const DISASTER_FX_DURATION_MS = 2800;
 const UNIT_STEP_DURATION_MS = 215;
 
-const MIN_ZOOM = 0.35;
+const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 4.2;
 const ZOOM_STEP = 0.25;
 
@@ -189,6 +192,55 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
   // Pre-rendered OffscreenCanvas world terrain cache (baked once per map load / viewMode change)
   const bakedTerrainRef = useRef<BakedWorldTerrain | null>(null);
 
+  const clampCameraToMap = useCallback(() => {
+    const canvas = canvasRef.current;
+    const allTiles = Object.values(state.tiles);
+    if (allTiles.length === 0) return;
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const t of allTiles) {
+      const p = axialToPixel(t.q, t.r, viewMode);
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const pad = HEX_SIZE * 1.2;
+    minX -= pad;
+    maxX += pad;
+    minY -= pad;
+    maxY += pad;
+
+    const mapW = maxX - minX;
+    const mapH = maxY - minY;
+    const rect = canvas?.getBoundingClientRect();
+    const viewW = (rect?.width ?? 1280) / cameraRef.current.zoom;
+    const viewH = (rect?.height ?? 720) / cameraRef.current.zoom;
+
+    if (mapW <= viewW) {
+      cameraRef.current.x = (minX + maxX) * 0.5;
+    } else {
+      const margin = viewW * 0.35;
+      cameraRef.current.x = Math.max(
+        minX + margin,
+        Math.min(maxX - margin, cameraRef.current.x)
+      );
+    }
+
+    if (mapH <= viewH) {
+      cameraRef.current.y = (minY + maxY) * 0.5;
+    } else {
+      const margin = viewH * 0.35;
+      cameraRef.current.y = Math.max(
+        minY + margin,
+        Math.min(maxY - margin, cameraRef.current.y)
+      );
+    }
+  }, [state.tiles, viewMode]);
+
   // Track smooth tile-to-tile unit movement animations
   const prevGameIdRef = useRef<string>(state.id);
   const prevUnitCoordsRef = useRef<Map<string, { q: number; r: number }>>(new Map());
@@ -222,6 +274,10 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
     const unsub = spriteAtlas.subscribe(() => {
       if (mounted) setRenderTick((v) => v + 1);
     });
+    comfyPropAtlas.ensureLoaded();
+    const unsubComfy = comfyPropAtlas.subscribe(() => {
+      if (mounted) setRenderTick((v) => v + 1);
+    });
 
     // Gentle 20fps ambient water shimmer & surf animation loop
     const waterTimer = window.setInterval(() => {
@@ -231,6 +287,7 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
     return () => {
       mounted = false;
       unsub();
+      unsubComfy();
       window.clearInterval(waterTimer);
     };
   }, []);
@@ -365,15 +422,20 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
     const p = axialToPixel(cameraTarget.q, cameraTarget.r, viewMode);
     cameraRef.current.x = p.x;
     cameraRef.current.y = p.y;
+    clampCameraToMap();
     setRenderTick((v) => v + 1);
-  }, [cameraTarget, viewMode]);
+  }, [cameraTarget, viewMode, clampCameraToMap]);
 
-  const adjustZoom = useCallback((delta: number) => {
-    const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, cameraRef.current.zoom + delta));
-    cameraRef.current.zoom = next;
-    setZoomDisplay(Math.round(next * 100));
-    setRenderTick((v) => v + 1);
-  }, []);
+  const adjustZoom = useCallback(
+    (delta: number) => {
+      const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, cameraRef.current.zoom + delta));
+      cameraRef.current.zoom = next;
+      clampCameraToMap();
+      setZoomDisplay(Math.round(next * 100));
+      setRenderTick((v) => v + 1);
+    },
+    [clampCameraToMap]
+  );
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -398,11 +460,14 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       }
       if (e.key === '=' || e.key === '+') adjustZoom(ZOOM_STEP);
       if (e.key === '-') adjustZoom(-ZOOM_STEP);
-      if (moved) setRenderTick((v) => v + 1);
+      if (moved) {
+        clampCameraToMap();
+        setRenderTick((v) => v + 1);
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [adjustZoom]);
+  }, [adjustZoom, clampCameraToMap]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -559,7 +624,74 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       ctx.fill();
     }
 
-    // PASS 4: Continuous Outer Empire Borders (Exact Hex Alignment)
+    // PASS 4: Y-Sorted 2.5D Terrain Features, Bridging Clusters & Improvements (with Forest Glade clearings)
+    const cityTileKeys = new Set<string>(cityByTile.keys());
+    const occupiedTileKeys = new Set<string>(cityTileKeys);
+    for (const u of Object.values(state.units)) {
+      occupiedTileKeys.add(tileKey(u.q, u.r));
+    }
+    for (const c of Object.values(state.barbarianCamps)) {
+      occupiedTileKeys.add(tileKey(c.q, c.r));
+    }
+
+    const terrainQueue: YSortedDrawable[] = collectTerrainFeatureDrawables(
+      state,
+      visibleList,
+      viewMode,
+      HEX_SIZE,
+      yScale,
+      cityTileKeys,
+      occupiedTileKeys,
+      timeSec
+    );
+
+    for (const item of visibleList) {
+      if (!item.explored) continue;
+      const { tile, px, py } = item;
+      const cityOnTile = cityByTile.get(tileKey(tile.q, tile.r));
+      if (!cityOnTile && tile.improvement !== 'none' && tile.improvement !== 'road') {
+        const infraSp = getInfrastructureSprite(tile.improvement, playerAge, tile.q, tile.r);
+        terrainQueue.push({
+          sortY: py + 1,
+          draw: (c) => {
+            if (isIso && infraSp?.dioramaCanvas) {
+              const targetW = HEX_SIZE * HEX_SQRT3 * 0.98;
+              const scale = targetW / infraSp.width;
+              const drawH = (infraSp.dioramaHeight ?? infraSp.height) * scale;
+              c.drawImage(
+                infraSp.dioramaCanvas,
+                px - targetW * 0.5,
+                py + HEX_SIZE * yScale - drawH,
+                targetW,
+                drawH
+              );
+            } else {
+              drawImprovement(c, tile, px, py, isIso);
+            }
+            if (tile.improvementDamaged) {
+              drawHexPath(c, getHexCorners(px, py, HEX_SIZE * 0.78, yScale));
+              c.fillStyle = 'rgba(220, 38, 38, 0.34)';
+              c.fill();
+            }
+          },
+        });
+      }
+      if (tile.feature !== 'none') {
+        terrainQueue.push({
+          sortY: py + 2,
+          draw: (c) => drawNaturalFeature(c, tile, px, py),
+        });
+      }
+    }
+
+    terrainQueue.sort((a, b) => a.sortY - b.sortY);
+    for (const drawable of terrainQueue) {
+      drawable.draw(ctx);
+    }
+
+    // PASS 5: Over-Canopy Hex Grid, Continuous Empire Borders & Tactical Highlights
+    renderOverCanopyHexGrid(ctx, visibleList, HEX_SIZE, yScale);
+
     for (const item of visibleList) {
       const ownerCivId = item.tile.ownerCivId;
       if (!item.explored || !ownerCivId) continue;
@@ -592,7 +724,6 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       }
     }
 
-    // PASS 5: Tactical Highlights (Movement Range, Attack Targets, Buy Tile, Hover)
     for (const item of visibleList) {
       if (!item.explored) continue;
       const { tile, px, py } = item;
@@ -600,7 +731,7 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
 
       if (reachableHexes.has(k)) {
         drawHexPath(ctx, getHexCorners(px, py, HEX_SIZE - 2.8, yScale));
-        ctx.fillStyle = 'rgba(34, 211, 238, 0.28)';
+        ctx.fillStyle = 'rgba(34, 211, 238, 0.24)';
         ctx.fill();
         ctx.strokeStyle = '#22d3ee';
         ctx.lineWidth = 2.5;
@@ -608,7 +739,7 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       }
       if (attackableKeys.has(k)) {
         drawHexPath(ctx, getHexCorners(px, py, HEX_SIZE - 2.8, yScale));
-        ctx.fillStyle = 'rgba(239, 68, 68, 0.32)';
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.28)';
         ctx.fill();
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 2.8;
@@ -617,7 +748,7 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       if (buyTileModeCityId && purchasableKeys.has(k)) {
         const city = state.cities[buyTileModeCityId];
         drawHexPath(ctx, getHexCorners(px, py, HEX_SIZE - 2.8, yScale));
-        ctx.fillStyle = 'rgba(234, 179, 8, 0.28)';
+        ctx.fillStyle = 'rgba(234, 179, 8, 0.26)';
         ctx.fill();
         ctx.strokeStyle = '#eab308';
         ctx.lineWidth = 2.4;
@@ -638,7 +769,6 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       }
     }
 
-    // Movement Path Preview
     if (selectedUnitId && hoverKeyRef.current && reachableHexes.has(hoverKeyRef.current)) {
       const unit = state.units[selectedUnitId];
       if (unit) {
@@ -667,69 +797,35 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       }
     }
 
-    // LAYER 3 (PHASE 3): Unified Y-Sorted 2.5D Terrain Features, Bridging Clusters, Improvements, Cities & Units
-    const cityTileKeys = new Set<string>(cityByTile.keys());
-    const ySortedQueue: YSortedDrawable[] = collectTerrainFeatureDrawables(
-      state,
-      visibleList,
-      viewMode,
-      HEX_SIZE,
-      yScale,
-      cityTileKeys
-    );
+    // PASS 6: Cities & Units Above Canopy (Y-sorted structures & unit sprites with contrast rim)
+    const entityQueue: YSortedDrawable[] = [];
+    const labelDrawCallbacks: Array<() => void> = [];
 
-    // Enqueue Tile Improvements & Natural Features
-    for (const item of visibleList) {
-      if (!item.explored) continue;
-      const { tile, px, py } = item;
-      const cityOnTile = cityByTile.get(tileKey(tile.q, tile.r));
-      if (!cityOnTile && tile.improvement !== 'none' && tile.improvement !== 'road') {
-        const infraSp = getInfrastructureSprite(tile.improvement, playerAge, tile.q, tile.r);
-        ySortedQueue.push({
-          sortY: py + 1,
-          draw: (c) => {
-            if (isIso && infraSp?.dioramaCanvas) {
-              const targetW = HEX_SIZE * HEX_SQRT3 * 0.98;
-              const scale = targetW / infraSp.width;
-              const drawH = (infraSp.dioramaHeight ?? infraSp.height) * scale;
-              c.drawImage(
-                infraSp.dioramaCanvas,
-                px - targetW * 0.5,
-                py + HEX_SIZE * yScale - drawH,
-                targetW,
-                drawH
-              );
-            } else {
-              drawImprovement(c, tile, px, py, isIso);
-            }
-            if (tile.improvementDamaged) {
-              drawHexPath(c, getHexCorners(px, py, HEX_SIZE * 0.78, yScale));
-              c.fillStyle = 'rgba(220, 38, 38, 0.34)';
-              c.fill();
-            }
-          },
-        });
-      }
-      if (tile.feature !== 'none') {
-        ySortedQueue.push({
-          sortY: py + 2,
-          draw: (c) => drawNaturalFeature(c, tile, px, py),
-        });
-      }
-    }
-
-    // Enqueue Barbarian Camps
     for (const camp of Object.values(state.barbarianCamps)) {
       const tile = state.tiles[tileKey(camp.q, camp.r)];
       if (!tile?.exploredBy[playerCivId]) continue;
       const { x: px, y: py } = axialToPixel(camp.q, camp.r, viewMode);
-      ySortedQueue.push({
-        sortY: py + 3,
-        draw: (c) => drawBarbarianCamp(c, camp.disposition === 'peaceful', camp.name, px, py),
+      entityQueue.push({
+        sortY: py,
+        draw: (c) => {
+          drawComfyCityOrCampSprite(
+            c,
+            'barbarian_camp',
+            Math.abs(camp.q * 31 + camp.r * 17),
+            px,
+            py,
+            HEX_SIZE,
+            yScale,
+            tile
+          );
+          drawBarbarianCamp(c, camp.disposition === 'peaceful', camp.name, px, py, 'structure');
+        },
       });
+      labelDrawCallbacks.push(() =>
+        drawBarbarianCamp(ctx, camp.disposition === 'peaceful', camp.name, px, py, 'label')
+      );
     }
 
-    // Enqueue Cities (with procedural/atlas citadel & banner)
     for (const city of Object.values(state.cities)) {
       const tile = state.tiles[tileKey(city.q, city.r)];
       if (!tile?.exploredBy[playerCivId]) continue;
@@ -746,10 +842,22 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
         city.r,
         hasCoastalWater
       );
-      ySortedQueue.push({
-        sortY: py + 4,
+      entityQueue.push({
+        sortY: py + 1,
         draw: (c) => {
-          if (isIso && citySprite?.dioramaCanvas) {
+          const drewComfy =
+            isIso &&
+            drawComfyCityOrCampSprite(
+              c,
+              'city_settlement',
+              Math.abs(city.q * 53 + city.r * 29),
+              px,
+              py,
+              HEX_SIZE,
+              yScale,
+              tile
+            );
+          if (!drewComfy && isIso && citySprite?.dioramaCanvas) {
             const targetW = HEX_SIZE * HEX_SQRT3 * 1.02;
             const scale = targetW / citySprite.width;
             const drawH = (citySprite.dioramaHeight ?? citySprite.height) * scale;
@@ -768,15 +876,29 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
             civ.ageIndex,
             selectedCityId === city.id,
             hasCoastalWater,
-            Boolean(citySprite?.dioramaCanvas && isIso),
+            Boolean((drewComfy || citySprite?.dioramaCanvas) && isIso),
             px,
-            py
+            py,
+            'structure'
           );
         },
       });
+      labelDrawCallbacks.push(() =>
+        draw3DCitadel(
+          ctx,
+          city,
+          civ.color,
+          civ.ageIndex,
+          selectedCityId === city.id,
+          hasCoastalWater,
+          Boolean((isIso && (citySprite?.dioramaCanvas || true))),
+          px,
+          py,
+          'label'
+        )
+      );
     }
 
-    // Enqueue Barbarian & Civilization Units (with smooth tile-to-tile interpolation)
     const nowPerf = performance.now();
     const resolveAnimatedPos = (id: string, q: number, r: number) => {
       const anim = activeUnitMovesRef.current.get(id);
@@ -815,8 +937,8 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
     for (const bu of Object.values(state.barbarianUnits)) {
       if (!state.tiles[tileKey(bu.q, bu.r)]?.visibleTo[playerCivId]) continue;
       const { px, py, strideLift } = resolveAnimatedPos(bu.id, bu.q, bu.r);
-      ySortedQueue.push({
-        sortY: py + 6,
+      entityQueue.push({
+        sortY: py + 3,
         draw: (c) =>
           drawBarbarianMiniature(
             c,
@@ -836,8 +958,8 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       const { px, py, strideLift } = resolveAnimatedPos(unit.id, unit.q, unit.r);
       const civ = state.civs[unit.civId];
       const def = UNIT_DEFS[unit.defId];
-      ySortedQueue.push({
-        sortY: py + 7,
+      entityQueue.push({
+        sortY: py + 4,
         draw: (c) =>
           drawIllustratedUnit(
             c,
@@ -847,19 +969,35 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
             selectedUnitId === unit.id,
             px,
             py,
-            strideLift
+            strideLift,
+            'structure'
           ),
       });
+      labelDrawCallbacks.push(() =>
+        drawIllustratedUnit(
+          ctx,
+          unit,
+          def,
+          civ.color,
+          selectedUnitId === unit.id,
+          px,
+          py,
+          strideLift,
+          'label'
+        )
+      );
     }
 
-    // Execute unified Y-sorted depth pass
-    ySortedQueue.sort((a, b) => a.sortY - b.sortY);
-    for (const drawable of ySortedQueue) {
+    entityQueue.sort((a, b) => a.sortY - b.sortY);
+    for (const drawable of entityQueue) {
       drawable.draw(ctx);
     }
 
-    // LAYER 4 (PHASE 4): Cartographic Parchment Fog of War
+    // PASS 7: Top-Most Cartographic Fog, City Nameplates, Unit Pins & Labels
     renderCartographicFog(ctx, unexploredEdgeTiles, HEX_SIZE, cam.zoom);
+    for (const drawLabel of labelDrawCallbacks) {
+      drawLabel();
+    }
 
     // PASS 9: Hover Tactical Combat Odds Preview
     if (selectedUnitId && hoverKeyRef.current && attackableKeys.has(hoverKeyRef.current)) {
@@ -945,6 +1083,7 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       if (Math.abs(dx) > 5 || Math.abs(dy) > 5) dragRef.current.moved = true;
       cameraRef.current.x = dragRef.current.camStartX - dx / cameraRef.current.zoom;
       cameraRef.current.y = dragRef.current.camStartY - dy / cameraRef.current.zoom;
+      clampCameraToMap();
       setRenderTick((v) => v + 1);
       return;
     }
@@ -986,6 +1125,7 @@ export const HexMapCanvas: React.FC<HexMapCanvasProps> = ({
       cameraRef.current.y += sy * (1 / prevZoom - 1 / nextZoom);
     }
     cameraRef.current.zoom = nextZoom;
+    clampCameraToMap();
     setZoomDisplay(Math.round(nextZoom * 100));
     setRenderTick((v) => v + 1);
   };
@@ -1725,44 +1865,31 @@ function drawNaturalFeature(
   px: number,
   cy: number
 ) {
+  if (tile.feature === 'natural_wonder' || tile.featureSurveyed) return;
+  // Subtle thematic survey glyph only while unsurveyed (no plain colored dots or cyan diamonds)
   ctx.save();
-  if (tile.feature === 'natural_wonder') {
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.32)';
-    ctx.beginPath();
-    ctx.arc(px, cy - 3, 14, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#67e8f9';
-    ctx.beginPath();
-    ctx.moveTo(px, cy - 15);
-    ctx.lineTo(px + 6, cy - 3);
-    ctx.lineTo(px, cy + 6);
-    ctx.lineTo(px - 6, cy - 3);
-    ctx.closePath();
-    ctx.fill();
-  } else {
-    const badgeColor =
-      tile.feature === 'coal'
-        ? '#1e293b'
-        : tile.feature === 'iron'
-          ? '#94a3b8'
-          : tile.feature === 'copper'
-            ? '#d97706'
-            : tile.feature === 'rare_flora'
-              ? '#34d399'
-              : tile.feature === 'fossils'
-                ? '#fde68a'
-                : tile.feature === 'geothermal_vent'
-                  ? '#f97316'
-                  : '#c084fc';
-
-    ctx.fillStyle = badgeColor;
-    ctx.strokeStyle = tile.featureSurveyed ? 'rgba(255,255,255,0.4)' : '#fef08a';
-    ctx.lineWidth = tile.featureSurveyed ? 1 : 1.8;
-    ctx.beginPath();
-    ctx.arc(px + 14, cy + 6, 5.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
+  const glyph =
+    tile.feature === 'ancient_ruins'
+      ? '⛩'
+      : tile.feature === 'fossils'
+        ? '🦴'
+        : tile.feature === 'geothermal_vent'
+          ? '⚡'
+          : tile.feature === 'rare_flora'
+            ? '🌿'
+            : '⛏';
+  ctx.font = '700 10px "Plus Jakarta Sans", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(12, 20, 28, 0.84)';
+  ctx.beginPath();
+  ctx.arc(px + 14, cy + 7, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(254, 240, 138, 0.85)';
+  ctx.lineWidth = 1.1;
+  ctx.stroke();
+  ctx.fillStyle = '#fef08a';
+  ctx.fillText(glyph, px + 14, cy + 7.5);
   ctx.restore();
 }
 
@@ -1775,90 +1902,95 @@ function draw3DCitadel(
   hasCoastalWater: boolean,
   using3DSpriteBlock: boolean,
   px: number,
-  cy: number
+  cy: number,
+  layer: 'both' | 'structure' | 'label' = 'both'
 ) {
   ctx.save();
-  if (selected) {
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 2.6;
-    ctx.beginPath();
-    ctx.ellipse(px, cy + 2, 26, 15, 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  if (!using3DSpriteBlock) {
-    ctx.fillStyle = 'rgba(0,0,0,0.34)';
-    ctx.beginPath();
-    ctx.ellipse(px + 3, cy + 6, 20, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (hasCoastalWater) {
-      ctx.fillStyle = '#78502b';
-      ctx.fillRect(px - 22, cy + 4, 10, 3);
-      ctx.fillRect(px - 20, cy + 4, 2, 7);
-      ctx.fillStyle = '#f8fafc';
+  if (layer !== 'label') {
+    if (selected) {
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 2.6;
       ctx.beginPath();
-      ctx.moveTo(px - 19, cy + 4);
-      ctx.lineTo(px - 19, cy - 3);
-      ctx.lineTo(px - 14, cy + 2);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    if (city.buildings.includes('walls')) {
-      ctx.strokeStyle = '#d6cfc2';
-      ctx.lineWidth = 2.8;
-      ctx.beginPath();
-      ctx.ellipse(px, cy + 1, 20, 12, 0, 0, Math.PI * 2);
+      ctx.ellipse(px, cy + 2, 26, 15, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
 
-    const towerH = 18 + Math.min(8, ageIndex);
-    ctx.fillStyle = '#e5dfd3';
-    ctx.fillRect(px - 4, cy - towerH + 4, 11, towerH);
-    ctx.fillStyle = civColor;
-    ctx.beginPath();
-    ctx.moveTo(px - 5, cy - towerH + 4);
-    ctx.lineTo(px + 1.5, cy - towerH - 4);
-    ctx.lineTo(px + 8, cy - towerH + 4);
-    ctx.closePath();
-    ctx.fill();
-  } else if (city.buildings.includes('walls')) {
+    if (!using3DSpriteBlock) {
+      ctx.fillStyle = 'rgba(0,0,0,0.34)';
+      ctx.beginPath();
+      ctx.ellipse(px + 3, cy + 6, 20, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (hasCoastalWater) {
+        ctx.fillStyle = '#78502b';
+        ctx.fillRect(px - 22, cy + 4, 10, 3);
+        ctx.fillRect(px - 20, cy + 4, 2, 7);
+        ctx.fillStyle = '#f8fafc';
+        ctx.beginPath();
+        ctx.moveTo(px - 19, cy + 4);
+        ctx.lineTo(px - 19, cy - 3);
+        ctx.lineTo(px - 14, cy + 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      if (city.buildings.includes('walls')) {
+        ctx.strokeStyle = '#d6cfc2';
+        ctx.lineWidth = 2.8;
+        ctx.beginPath();
+        ctx.ellipse(px, cy + 1, 20, 12, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      const towerH = 18 + Math.min(8, ageIndex);
+      ctx.fillStyle = '#e5dfd3';
+      ctx.fillRect(px - 4, cy - towerH + 4, 11, towerH);
+      ctx.fillStyle = civColor;
+      ctx.beginPath();
+      ctx.moveTo(px - 5, cy - towerH + 4);
+      ctx.lineTo(px + 1.5, cy - towerH - 4);
+      ctx.lineTo(px + 8, cy - towerH + 4);
+      ctx.closePath();
+      ctx.fill();
+    } else if (city.buildings.includes('walls')) {
+      ctx.strokeStyle = civColor;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.ellipse(px, cy + 2, 24, 13.5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  if (layer !== 'structure') {
+    // Brass-framed City Banner
+    const label = `${city.isCapital ? '★ ' : ''}${city.name}`;
+    ctx.font = '600 11px "Plus Jakarta Sans", sans-serif';
+    const tw = ctx.measureText(label).width;
+    const pillW = tw + 30;
+    ctx.fillStyle = 'rgba(13, 26, 36, 0.94)';
     ctx.strokeStyle = civColor;
     ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.ellipse(px, cy + 2, 24, 13.5, 0, 0, Math.PI * 2);
+    ctx.roundRect(px - pillW / 2, cy + 11, pillW, 18, 4);
+    ctx.fill();
     ctx.stroke();
-  }
 
-  // Brass-framed City Banner
-  const label = `${city.isCapital ? '★ ' : ''}${city.name}`;
-  ctx.font = '600 11px "Plus Jakarta Sans", sans-serif';
-  const tw = ctx.measureText(label).width;
-  const pillW = tw + 30;
-  ctx.fillStyle = 'rgba(13, 26, 36, 0.94)';
-  ctx.strokeStyle = civColor;
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.roundRect(px - pillW / 2, cy + 11, pillW, 18, 4);
-  ctx.fill();
-  ctx.stroke();
+    ctx.fillStyle = '#f8f3e6';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, px - pillW / 2 + 6, cy + 23);
 
-  ctx.fillStyle = '#f8f3e6';
-  ctx.textAlign = 'left';
-  ctx.fillText(label, px - pillW / 2 + 6, cy + 23);
+    ctx.fillStyle = '#e6c983';
+    ctx.font = '700 11px "JetBrains Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${city.population}`, px + pillW / 2 - 6, cy + 23);
 
-  ctx.fillStyle = '#e6c983';
-  ctx.font = '700 11px "JetBrains Mono", monospace';
-  ctx.textAlign = 'right';
-  ctx.fillText(`${city.population}`, px + pillW / 2 - 6, cy + 23);
-
-  if (city.hp < city.maxHp) {
-    const barY = using3DSpriteBlock ? cy - 28 : cy - 26;
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(px - 16, barY, 32, 4);
-    ctx.fillStyle = '#22c55e';
-    ctx.fillRect(px - 16, barY, 32 * (city.hp / city.maxHp), 4);
+    if (city.hp < city.maxHp) {
+      const barY = using3DSpriteBlock ? cy - 28 : cy - 26;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(px - 16, barY, 32, 4);
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(px - 16, barY, 32 * (city.hp / city.maxHp), 4);
+    }
   }
   ctx.restore();
 }
@@ -1871,76 +2003,88 @@ function drawIllustratedUnit(
   selected: boolean,
   px: number,
   cy: number,
-  strideLift = 0
+  strideLift = 0,
+  layer: 'both' | 'structure' | 'label' = 'both'
 ) {
   const uy = cy - 2 - strideLift;
   ctx.save();
 
-  const shadowScale = Math.max(0.8, 1 - strideLift * 0.025);
-  ctx.fillStyle = 'rgba(0,0,0,0.42)';
-  ctx.beginPath();
-  ctx.ellipse(px, cy + 6.5, 13 * shadowScale, 5.2 * shadowScale, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = selected ? '#fbbf24' : civColor;
-  ctx.lineWidth = selected ? 2.8 : 2.1;
-  ctx.beginPath();
-  ctx.ellipse(px, cy + 6, 15, 6.5, 0, 0, Math.PI * 2);
-  ctx.stroke();
-
   const unitSprite = getUnitMiniatureSprite(unit, def);
   let pinY = uy - 22;
-
+  const targetH =
+    def.role === 'naval' || def.id === 'tank' || def.role === 'siege' || def.role === 'settler'
+      ? 40
+      : 38;
   if (unitSprite) {
-    const targetH =
-      def.role === 'naval' || def.id === 'tank' || def.role === 'siege' || def.role === 'settler'
-        ? 40
-        : 38;
-    const drawW = targetH * (unitSprite.width / unitSprite.height);
-    const drawX = px - drawW / 2;
     const drawY = cy + 8 - targetH - strideLift;
-    ctx.drawImage(unitSprite.canvas, drawX, drawY, drawW, targetH);
     pinY = drawY - 6;
-  } else {
-    drawPersonTorso(ctx, px, uy, civColor, '#cbd5e1');
   }
 
-  // Civ VI Style Teardrop Pin Badge
-  const pinX = px;
-  ctx.fillStyle = civColor;
-  ctx.strokeStyle = selected ? '#fbbf24' : '#f8f3e6';
-  ctx.lineWidth = selected ? 2.2 : 1.5;
-  ctx.beginPath();
-  ctx.arc(pinX, pinY, 7.5, Math.PI * 0.75, Math.PI * 0.25);
-  ctx.lineTo(pinX, pinY + 11);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = '#0f172a';
-  ctx.beginPath();
-  ctx.arc(pinX, pinY, 2.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  if (unit.movesLeft > 0 && !unit.task) {
-    ctx.fillStyle = '#22d3ee';
+  if (layer !== 'label') {
+    const shadowScale = Math.max(0.8, 1 - strideLift * 0.025);
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
     ctx.beginPath();
-    ctx.arc(pinX + 8, pinY - 6, 3, 0, Math.PI * 2);
+    ctx.ellipse(px, cy + 6.5, 13 * shadowScale, 5.2 * shadowScale, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    ctx.strokeStyle = selected ? '#fbbf24' : civColor;
+    ctx.lineWidth = selected ? 2.8 : 2.1;
+    ctx.beginPath();
+    ctx.ellipse(px, cy + 6, 15, 6.5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (unitSprite) {
+      const drawW = targetH * (unitSprite.width / unitSprite.height);
+      const drawX = px - drawW / 2;
+      const drawY = cy + 8 - targetH - strideLift;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.78)';
+      ctx.shadowBlur = 3.5;
+      ctx.drawImage(unitSprite.canvas, drawX, drawY, drawW, targetH);
+      ctx.restore();
+    } else {
+      drawPersonTorso(ctx, px, uy, civColor, '#cbd5e1');
+    }
   }
 
-  if (unit.pendingPromotion) {
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = '700 12px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('★', pinX - 10, pinY - 4);
-  }
+  if (layer !== 'structure') {
+    // Civ VI Style Teardrop Pin Badge
+    const pinX = px;
+    ctx.fillStyle = civColor;
+    ctx.strokeStyle = selected ? '#fbbf24' : '#f8f3e6';
+    ctx.lineWidth = selected ? 2.2 : 1.5;
+    ctx.beginPath();
+    ctx.arc(pinX, pinY, 7.5, Math.PI * 0.75, Math.PI * 0.25);
+    ctx.lineTo(pinX, pinY + 11);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
 
-  if (unit.hp < unit.maxHp) {
     ctx.fillStyle = '#0f172a';
-    ctx.fillRect(px - 11, pinY - 12, 22, 3);
-    ctx.fillStyle = unit.hp / unit.maxHp > 0.45 ? '#22c55e' : '#ef4444';
-    ctx.fillRect(px - 11, pinY - 12, 22 * (unit.hp / unit.maxHp), 3);
+    ctx.beginPath();
+    ctx.arc(pinX, pinY, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (unit.movesLeft > 0 && !unit.task) {
+      ctx.fillStyle = '#22d3ee';
+      ctx.beginPath();
+      ctx.arc(pinX + 8, pinY - 6, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (unit.pendingPromotion) {
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = '700 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('★', pinX - 10, pinY - 4);
+    }
+
+    if (unit.hp < unit.maxHp) {
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(px - 11, pinY - 12, 22, 3);
+      ctx.fillStyle = unit.hp / unit.maxHp > 0.45 ? '#22c55e' : '#ef4444';
+      ctx.fillRect(px - 11, pinY - 12, 22 * (unit.hp / unit.maxHp), 3);
+    }
   }
   ctx.restore();
 }
@@ -1971,28 +2115,33 @@ function drawBarbarianCamp(
   peaceful: boolean,
   name: string,
   px: number,
-  cy: number
+  cy: number,
+  layer: 'both' | 'structure' | 'label' = 'both'
 ) {
   ctx.save();
-  ctx.fillStyle = peaceful ? '#0f766e' : '#7f1d1d';
-  ctx.strokeStyle = peaceful ? '#5eead4' : '#f87171';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(px - 12, cy + 6);
-  ctx.lineTo(px, cy - 11);
-  ctx.lineTo(px + 12, cy + 6);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
+  if (layer !== 'label') {
+    ctx.fillStyle = peaceful ? '#0f766e' : '#7f1d1d';
+    ctx.strokeStyle = peaceful ? '#5eead4' : '#f87171';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(px - 12, cy + 6);
+    ctx.lineTo(px, cy - 11);
+    ctx.lineTo(px + 12, cy + 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
 
-  const label = `${peaceful ? 'Peaceful: ' : 'Raider: '}${name}`;
-  ctx.font = '600 10px "Plus Jakarta Sans", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-  ctx.lineWidth = 2.5;
-  ctx.strokeText(label, px, cy + 18);
-  ctx.fillStyle = peaceful ? '#0f766e' : '#991b1b';
-  ctx.fillText(label, px, cy + 18);
+  if (layer !== 'structure') {
+    const label = `${peaceful ? 'Peaceful: ' : 'Raider: '}${name}`;
+    ctx.font = '600 10px "Plus Jakarta Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2.5;
+    ctx.strokeText(label, px, cy + 18);
+    ctx.fillStyle = peaceful ? '#0f766e' : '#991b1b';
+    ctx.fillText(label, px, cy + 18);
+  }
   ctx.restore();
 }
 

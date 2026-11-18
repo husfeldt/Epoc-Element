@@ -42,6 +42,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   const [aiCount, setAiCount] = useState<number>(3);
   const [pacing, setPacing] = useState<TurnPacing>('standard');
   const [difficulty, setDifficulty] = useState<Difficulty>('strategist');
+  const [revealAllMap, setRevealAllMap] = useState(false);
   const [imgError, setImgError] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -54,6 +55,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
       aiCount,
       pacing,
       difficulty,
+      revealAllMap,
     });
   };
 
@@ -235,7 +237,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Map Size</label>
                 <div className="flex items-center gap-1 p-1 bg-[#081118] rounded-lg border border-white/10">
-                  {(['small', 'medium', 'large'] as MapSize[]).map((sz) => (
+                  {(['small', 'medium', 'large', 'huge'] as MapSize[]).map((sz) => (
                     <button
                       key={sz}
                       type="button"
@@ -246,7 +248,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                           : 'text-slate-300 hover:bg-white/10'
                       }`}
                     >
-                      {sz}
+                      {sz === 'medium' ? 'Standard' : sz}
                     </button>
                   ))}
                 </div>
@@ -303,6 +305,22 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                 ))}
               </div>
             </div>
+
+            {/* Map Visibility Toggle */}
+            <label className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-[#081118]/80 border border-white/10 cursor-pointer hover:border-sky-400/40 transition-colors">
+              <div>
+                <div className="text-xs font-semibold text-slate-200">Full Map Revealed</div>
+                <div className="text-[11px] text-slate-400">
+                  Start with the entire world explored &amp; visible (no Fog of War)
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={revealAllMap}
+                onChange={(e) => setRevealAllMap(e.target.checked)}
+                className="w-4 h-4 accent-sky-400 cursor-pointer"
+              />
+            </label>
           </div>
 
           <button

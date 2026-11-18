@@ -126,10 +126,10 @@ export function getInventionTurnChance(
   researchPerTurn: number,
   pacingMultiplier: number
 ): number {
-  const researchScale = 0.7 + Math.min(1.6, researchPerTurn / 18);
+  const researchScale = 0.65 + Math.min(1.4, researchPerTurn / 24);
   const pity = civ.inventionPity[inv.id] ?? 0;
-  const raw = inv.baseChance * modifiers.totalMultiplier * researchScale * pacingMultiplier + pity;
-  return Math.min(0.92, Math.max(0.03, raw));
+  const raw = inv.baseChance * 0.55 * modifiers.totalMultiplier * researchScale * pacingMultiplier + pity;
+  return Math.min(0.88, Math.max(0.02, raw));
 }
 
 export function getPacingResearchFactor(pacing: GameState['config']['pacing']): number {
@@ -162,12 +162,13 @@ export function processCivResearchTurn(
     const totalWeight = weights.reduce((s, item) => s + item.w, 0);
 
     const literacyMult = civ.unlockedInventions.includes('literacy_reading') ? 1.12 : 1.0;
+    // ~2.6x higher Core Knowledge / science threshold per era so early techs take 12-20 turns
     const effectiveRp =
-      researchPerTurn * (0.75 + modifiers.totalMultiplier * 0.35) * pacingFactor * literacyMult;
+      researchPerTurn * 0.38 * (0.75 + modifiers.totalMultiplier * 0.35) * pacingFactor * literacyMult;
     for (const { node, w } of weights) {
       const share = (w / totalWeight) * effectiveRp;
       const pctGain = (share / node.baseDifficulty) * 100;
-      const luckSpark = Math.random() < 0.08 * modifiers.totalMultiplier ? 18 : 0;
+      const luckSpark = Math.random() < 0.06 * modifiers.totalMultiplier ? 6 : 0;
       const nextVal = (civ.coreProgress[node.id] ?? 0) + pctGain + luckSpark;
       civ.coreProgress[node.id] = nextVal;
 
@@ -210,7 +211,7 @@ export function processCivResearchTurn(
       }
     } else {
       // Accumulate gentle pity luck so discoveries don't stall forever
-      civ.inventionPity[inv.id] = (civ.inventionPity[inv.id] ?? 0) + 0.035 * pacingFactor;
+      civ.inventionPity[inv.id] = (civ.inventionPity[inv.id] ?? 0) + 0.015 * pacingFactor;
     }
   }
 
